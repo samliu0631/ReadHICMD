@@ -35,6 +35,8 @@ np.random.seed(opt.random_seed) # Set the seed number of random algorithm
 torch.manual_seed(opt.random_seed)  # 设置 (CPU) 生成随机数的种子.  目的是为了每次实验产生的随机数是一样的，有利于实验结果的比对。
 torch.cuda.manual_seed_all(opt.random_seed)  # 为所有GPU设置随机数的种子。
 opt = opt_settings(opt)
+
+# 加载训练数据。
 dataloaders, dataloaders_train_tsne, old_train_dataloader, data_info, data_sample, opt = data_settings(opt)
 opt = opt_test_settings(opt)
 
@@ -63,9 +65,9 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
                 epoch_cnt = trainer.cnt_cumul
 
                 # Print, record, and plot the training results
-                if ((cnt + 1) % opt.cnt_print_loss == 0) or (cnt == len(dataloaders[phase]) - 1):
-                    pp.print_info(opt, epoch, cnt, len(dataloaders[phase]) - 1, trainer.loss_type, trainer.acc_type, \
-                                  trainer.etc_type, trainer.cnt_cumul)  # 打印训练数据信息
+                if ( (cnt + 1) % opt.cnt_print_loss == 0  )   or   (cnt == len(dataloaders[phase]) - 1) :
+                    pp.print_info(opt, epoch, cnt, len(dataloaders[phase]) - 1, trainer.loss_type, trainer.acc_type, trainer.etc_type, trainer.cnt_cumul)  # 打印训练数据信息
+
                 if (trainer.cnt_cumul % opt.cnt_draw_plot == 0) or pp.plot_init:
                     pp.record_info(opt, phase, epoch, trainer.loss_type, trainer.acc_type, trainer.etc_type, trainer.cnt_cumul)
                 pp.plot_initialization(opt)
@@ -73,8 +75,10 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
                 # Draw samples
                 if (trainer.cnt_cumul % opt.cnt_draw_samples == 0):
                     with torch.no_grad():
+
                         train_image_outputs = trainer.sample_basic(opt, data_sample, 'train')
                         test_image_outputs = trainer.sample_basic(opt, data_sample, 'test')
+
                     if len(train_image_outputs):
                         write_2images(opt, test_image_outputs, os.path.join(opt.save_dir, 'sample_basic'), \
                                       'test_{}'.format(str(trainer.cnt_cumul).zfill(7)))
@@ -83,6 +87,7 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
 
                     if opt.test_latent:
                         with torch.no_grad():
+
                             train_image_outputs = trainer.sample_latent_change(opt, data_sample, 'train')
                             test_image_outputs = trainer.sample_latent_change(opt, data_sample, 'test')
                         if len(train_image_outputs):
