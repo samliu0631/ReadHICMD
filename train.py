@@ -45,17 +45,17 @@ pp = print_and_plot(opt)
 
 # 进行训练
 for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
-    print('=' * 40 + ' [ Epoch {}/{} ] '.format(epoch + 1, opt.num_epoch) + '=' * 40) # 打印
-    for phase in opt.phase_exp: # Each epoch has a training & validation & testing phase
+    print('=' * 40 + ' [ Epoch {}/{} ] '.format(epoch + 1, opt.num_epoch) + '=' * 40) # 打印====[Eoch 1/25]========
+    for phase in opt.phase_exp:                   # Each epoch has a training & validation & testing phase.
         print('[{}] mode is processing..'.format(phase))
 
-        if phase in [opt.phase_train, 'val']:   # val ：validation.
-            if ('val' == phase) and ((epoch + 1) % opt.val_epoch != 0):
-                continue # skip validation
+        if phase in [opt.phase_train, 'val']:      # val ：validation.
+            if ('val' == phase) and ((epoch + 1) % opt.val_epoch != 0):  # 如果是验证阶段，就跳过。
+                continue                            # skip validation
             if phase == opt.phase_train:
-                trainer.train()  # Set model to training mode
-            else:  ## Validation and testing phase
-                trainer.eval()  # Set model to evaluate mode
+                trainer.train()                     # Set model to training mode
+            else:                                   # Validation and testing phase
+                trainer.eval()                      # Set model to evaluate mode
             for cnt, data in enumerate(dataloaders[phase]): # Iterate training or validation each batch
 
                 # main iteration
