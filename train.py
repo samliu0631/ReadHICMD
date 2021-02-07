@@ -45,7 +45,7 @@ pp = print_and_plot(opt)
 
 # 进行训练
 for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
-    print('=' * 40 + ' [ Epoch {}/{} ] '.format(epoch + 1, opt.num_epoch) + '=' * 40)
+    print('=' * 40 + ' [ Epoch {}/{} ] '.format(epoch + 1, opt.num_epoch) + '=' * 40) # 打印
     for phase in opt.phase_exp: # Each epoch has a training & validation & testing phase
         print('[{}] mode is processing..'.format(phase))
 
