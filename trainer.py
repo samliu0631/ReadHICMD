@@ -176,28 +176,28 @@ class HICMD(nn.Module):
         self.rand_erasing = RandomErasing(probability=opt.CE_erasing_p, mean=[0.0, 0.0, 0.0])
 
     def go_train(self, data, opt, phase, cnt, epoch):
-
+        # data:一共6个元素，每个元素的尺度是 1×3×256×128
         # Batch sampler
-        if phase in opt.phase_train:
-            self.cnt_cumul += 1
-        pred_labels = f = pf = nf = []  # initialize
-        _, pos, neg, attribute, attribute_pos, attribute_neg, labels = self.data_variable(opt, data)
-        self.is_pos = True if len(pos) > 0 else False
-        self.is_neg = True if len(neg) > 0 else False
+        if phase in opt.phase_train:    # 如果阶段是"train_all"
+            self.cnt_cumul += 1         # 计数累加。
+        pred_labels = f = pf = nf = []  # initialize 初始化为空的列表。
+        _, pos, neg, attribute, attribute_pos, attribute_neg, labels = self.data_variable(opt, data)   # 从输入数据中分离出不同的变量类型。
+        self.is_pos = True if len(pos) > 0 else False  # is_pos用来判断 是否存在有效的pos
+        self.is_neg = True if len(neg) > 0 else False  # is_neq用来判断 是否存在有效的neg。
 
-        pos_all = pos[0]
-        pos_label_all = attribute_pos['order'][0]
-        pos_cam_all = attribute_pos['cam'][0]
-        pos_modal_all = attribute_pos['modal'][0]
-        num_pos = pos_all.size(0)
+        pos_all = pos[0]                              # pos_all:  维度8×3×256×128， 所以共计有8个分组。
+        pos_label_all = attribute_pos['order'][0]     # 维度 8维向量。
+        pos_cam_all = attribute_pos['cam'][0]         # 8维向量。
+        pos_modal_all = attribute_pos['modal'][0]     # 8维向量
+        num_pos = pos_all.size(0)                     # num_pos = 8 .
 
-        pos_a1_idx = [x for x in range(num_pos) if x % 4 == 0]
-        pos_a2_idx = [x for x in range(num_pos) if x % 4 == 1]
-        pos_b1_idx = [x for x in range(num_pos) if x % 4 == 2]
-        pos_b2_idx = [x for x in range(num_pos) if x % 4 == 3]
+        pos_a1_idx = [x for x in range(num_pos) if x % 4 == 0]   # pos_a1_idx = [0 4]      # num_pos =8. range(num_pos): 0 1 2 3 4 5 6 7
+        pos_a2_idx = [x for x in range(num_pos) if x % 4 == 1]   # pos_a2_idx = [1,5]
+        pos_b1_idx = [x for x in range(num_pos) if x % 4 == 2]   # pos_b1_idx = [2,6]
+        pos_b2_idx = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7]
 
-        x_a1 = pos_all[pos_a1_idx]
-        x_a2 = pos_all[pos_a2_idx]
+        x_a1 = pos_all[pos_a1_idx]    # 获取pos_all中 第0,4个元素。
+        x_a2 = pos_all[pos_a2_idx]    #
         x_b1 = pos_all[pos_b1_idx]
         x_b2 = pos_all[pos_b2_idx]
 
