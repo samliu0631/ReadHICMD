@@ -246,7 +246,7 @@ def opt_settings(opt):
 def data_settings(opt):
     #---------------------------------------# Transform data
 
-    transform_train_list = []
+    transform_train_list = []  # List used to store the different class instances for training.
     transform_train_list = transform_train_list + [transforms.Resize((opt.h,opt.w), interpolation=3)]
     transform_train_list = transform_train_list + [transforms.Pad(opt.pad)] if opt.pad > 0 else transform_train_list
     transform_train_list = transform_train_list + [transforms.RandomCrop((opt.h,opt.w))] if opt.pad > 0 else transform_train_list
@@ -254,14 +254,14 @@ def data_settings(opt):
     transform_train_list = transform_train_list + [transforms.ToTensor()]
     transform_train_list = transform_train_list + [transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
 
-    transform_val_list = []
-    transform_val_list = transform_val_list + [transforms.Resize(size=(opt.h,opt.w),interpolation=3)]
+    transform_val_list = []  # List used to store the different class instances for evaluation.
+    transform_val_list = transform_val_list + [transforms.Resize(size=(opt.h,opt.w),interpolation=3)]   # calling __init__ of each class.
     transform_val_list = transform_val_list + [transforms.ToTensor()]
     transform_val_list = transform_val_list + [transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
 
-    if opt.all_erasing_p>0:
+    if opt.all_erasing_p>0:   # false
         transform_train_list = transform_train_list +  [RandomErasing(probability = opt.all_erasing_p, mean=[0.0, 0.0, 0.0])]
-    if opt.color_jitter:
+    if opt.color_jitter:     # false
         transform_train_list = [transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0)] + transform_train_list
     data_transforms = {}
     for x in opt.phase_data:

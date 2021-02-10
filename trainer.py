@@ -178,14 +178,14 @@ class HICMD(nn.Module):
     def go_train(self, data, opt, phase, cnt, epoch):
         # data:一共6个元素，每个元素的尺度是 1×3×256×128
         # Batch sampler
-        if phase in opt.phase_train:    # 如果阶段是"train_all"
+        if phase in opt.phase_train:    # 如果 phase== "train_all"
             self.cnt_cumul += 1         # 计数累加。
         pred_labels = f = pf = nf = []  # initialize 初始化为空的列表。
         _, pos, neg, attribute, attribute_pos, attribute_neg, labels = self.data_variable(opt, data)   # 从输入数据中分离出不同的变量类型。
-        self.is_pos = True if len(pos) > 0 else False  # is_pos用来判断 是否存在有效的pos
-        self.is_neg = True if len(neg) > 0 else False  # is_neq用来判断 是否存在有效的neg。
+        self.is_pos = True if len(pos) > 0 else False  # is_pos用来判断 是否存在有效的pos    pos.shape = 1*8*3*256*128
+        self.is_neg = True if len(neg) > 0 else False  # is_neq用来判断 是否存在有效的neg。  neg.shape = 1*4*3*256*128
 
-        pos_all = pos[0]                              # pos_all:  维度8×3×256×128， 所以共计有8个分组。
+        pos_all = pos[0]                              # pos_all:  维度8×3×256×128， 所以共计有8个分组。(the first and only element in pos)
         pos_label_all = attribute_pos['order'][0]     # 维度 8维向量。
         pos_cam_all = attribute_pos['cam'][0]         # 8维向量。
         pos_modal_all = attribute_pos['modal'][0]     # 8维向量
@@ -197,30 +197,30 @@ class HICMD(nn.Module):
         pos_b2_idx = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7]
 
         x_a1 = pos_all[pos_a1_idx]    # 获取pos_all中 第0,4个元素。
-        x_a2 = pos_all[pos_a2_idx]    #
-        x_b1 = pos_all[pos_b1_idx]
-        x_b2 = pos_all[pos_b2_idx]
+        x_a2 = pos_all[pos_a2_idx]    # 获取pos_all中 第1,5的元素。
+        x_b1 = pos_all[pos_b1_idx]    # 获取pos_all中 第2,6的元素。
+        x_b2 = pos_all[pos_b2_idx]    # 获取pos_all中 第3,7的元素。
 
-        labels_a1 = pos_label_all[pos_a1_idx]
-        labels_a2 = pos_label_all[pos_a2_idx]
-        labels_b1 = pos_label_all[pos_b1_idx]
-        labels_b2 = pos_label_all[pos_b2_idx]
+        labels_a1 = pos_label_all[pos_a1_idx]    # 获取pos_label_all中 第0,4的元素。
+        labels_a2 = pos_label_all[pos_a2_idx]    # 获取pos_label_all中 第1,5的元素。
+        labels_b1 = pos_label_all[pos_b1_idx]    # 获取pos_label_all中 第2,6的元素。
+        labels_b2 = pos_label_all[pos_b2_idx]    # 获取pos_label_all中 第3,7的元素。
 
-        modals_a1 = pos_modal_all[pos_a1_idx]
+        modals_a1 = pos_modal_all[pos_a1_idx]    # Get the 0-st 4st element.
         modals_a2 = pos_modal_all[pos_a2_idx]
         modals_b1 = pos_modal_all[pos_b1_idx]
         modals_b2 = pos_modal_all[pos_b2_idx]
 
-        cams_a1 = pos_cam_all[pos_a1_idx]
+        cams_a1 = pos_cam_all[pos_a1_idx]   # Get the pos of 0 4 st element.
         cams_a2 = pos_cam_all[pos_a2_idx]
         cams_b1 = pos_cam_all[pos_b1_idx]
         cams_b2 = pos_cam_all[pos_b2_idx]
 
-        if self.is_neg:
-            neg_all = neg[0]
-            neg_label_all = attribute_neg['order'][0]
-            neg_cam_all = attribute_neg['cam'][0]
-            neg_modal_all = attribute_neg['modal'][0]
+        if self.is_neg:              # 如果存在有效的neg则进行赋值，否则置为空列表。
+            neg_all = neg[0]         #
+            neg_label_all = attribute_neg['order'][0]    # 获取 neg_label_all
+            neg_cam_all = attribute_neg['cam'][0]        #
+            neg_modal_all = attribute_neg['modal'][0]    #
             num_neg = neg_all.size(0)
             neg_a_idx = [x for x in range(num_neg) if x < opt.neg_mini_batch]
             neg_b_idx = [x for x in range(num_neg) if x >= opt.neg_mini_batch]
@@ -1613,8 +1613,8 @@ class HICMD(nn.Module):
     ##########################################################################################################
 
     def data_variable(self, opt, data):
-        inputs, pos, neg, attribute, attribute_pos, attribute_neg = data
-        self.b, self.c, self.h, self.w = inputs.shape
+        inputs, pos, neg, attribute, attribute_pos, attribute_neg = data # Get the six element of data which is a List.
+        self.b, self.c, self.h, self.w = inputs.shape  #  1*3*256*128
         if self.b == 1:
             self.b = opt.pos_mini_batch
         if opt.use_gpu:
