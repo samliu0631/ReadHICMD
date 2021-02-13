@@ -372,15 +372,20 @@ class PosNegSampler(datasets.ImageFolder):
         return ori, pos, neg, attribute, attribute_pos, attribute_neg
 
 def get_attribute(data_flag, img_samples, flag):
+    # data_flag:   a  number
+    # img_samples:  list all the path and type of images.
+    # flag: number
+
     cams = []
     labels = []
     modals = []
     for path, idx in img_samples:
-        labels.append(get_real_label(path, data_flag))
-        cams.append(get_cam(path, data_flag))
-        modals.append(gel_modal(path, data_flag))
+        # iterate the path and type id of each image.
+        labels.append(get_real_label(path, data_flag))  # 获得图片所在类的编号，就是图片所在文件夹的命名编号。
+        cams.append(get_cam(path, data_flag))     # 获得相机的属性编码， 0表示红外相机，1表示可见光相机。
+        modals.append(gel_modal(path, data_flag))  # 获取图像的模态编号， 0表示红外图像，1 表示可见光图像。
 
-    cams = np.asarray(cams)
+    cams = np.asarray(cams)   # 将相机的属性编码，变换为ndarray数据类型。
 
     if flag == 1:  # [1,2,4,5]->0, 3->1, 6->2
         change_set = [[1, 0], [2, 0], [4, 0], [5, 0], [3, 1], [6, 2]]

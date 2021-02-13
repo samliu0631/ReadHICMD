@@ -511,6 +511,7 @@ def fliplr(img):
     return img_flip
 
 class DummySampler(Sampler):
+    # 作者定义的自己的sampler
     def __init__(self, data):
         self.num_samples = len(data)
 

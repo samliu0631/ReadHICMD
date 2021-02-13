@@ -280,20 +280,26 @@ def data_settings(opt):
 
     data_info = {}    # Initial dict.
     # if opt.test_tsne and opt.test_on:
-    # 对dataloader进行初始化。
+
     image_datasets_train_tsne = datasets.ImageFolder( os.path.join(opt.data_dir, opt.data_name, opt.phase_train), data_transforms['query'] )
+    # 利用datasets.ImageFolder进行初始化。 imagefolder类的实例初始化。 提供图片的root目录，以及Compose类型的数据变换方法。
+    # Root location: ./data/RegDB_01/train_all   4120个target.
+
     cnt = 0
     for i in range(   len(  image_datasets_train_tsne.targets  )   ):  # 4120表示所有的图像个数。
-        if image_datasets_train_tsne.targets[i] < opt.test_tsne_num:
-            cnt += 1
-    sampler = DummySampler(image_datasets_train_tsne)
-    sampler.num_samples = cnt
+        if image_datasets_train_tsne.targets[i] < opt.test_tsne_num:   # opt.test_tsne_num = 15.
+            cnt += 1   # 记录train_all文件夹中前15个子文件夹的图像数量。 共计300个。
+    sampler = DummySampler(image_datasets_train_tsne)  # dummy 仿制品，假的。  dummysampler模拟采样器。
+    sampler.num_samples = cnt  # 设置采样数量。
     # sampler.num_samples = len(image_datasets_train_tsne.targets)
 
-
+    # 产生dataloader对象
     dataloaders_train_tsne = torch.utils.data.DataLoader(image_datasets_train_tsne, batch_size=opt.set_batchsize['query'], shuffle=opt.set_shuffle['query'],
                                               num_workers=opt.set_workers['query'], sampler = sampler, pin_memory=opt.pin_memory, drop_last=opt.set_droplast['query'])
     data_info['train_tsne_cam'], data_info['train_tsne_label'], data_info['train_tsne_modal'] = get_attribute(opt.data_flag, image_datasets_train_tsne.imgs, flag = opt.type_domain_label)
+    # opt.data_flag= 5 ,
+    # image_datasets_train_tsne.imgs: 图片的目录和类型。
+    # opt.type_domain_label = 0
 
     train_label_all = data_info['train_tsne_label'] # all labels
     train_modal_all = data_info['train_tsne_modal']
@@ -519,7 +525,7 @@ def data_settings(opt):
         opt.total_cnt = math.ceil(new_epoch) * math.floor(
             len(dataloaders[opt.phase_train].dataset.imgs) / opt.train_batchsize)
 
-
+    # 返回加载的数据。
     return dataloaders, dataloaders_train_tsne, old_train_dataloader, data_info, data_sample, opt
 
 
