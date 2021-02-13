@@ -246,12 +246,15 @@ def opt_settings(opt):
 def data_settings(opt):
     #---------------------------------------# Transform data
 
+    # 用于对于图片数据的加载和预处理。
     transform_train_list = []  # List used to store the different class instances for training.
-    transform_train_list = transform_train_list + [transforms.Resize((opt.h,opt.w), interpolation=3)]
-    transform_train_list = transform_train_list + [transforms.Pad(opt.pad)] if opt.pad > 0 else transform_train_list
-    transform_train_list = transform_train_list + [transforms.RandomCrop((opt.h,opt.w))] if opt.pad > 0 else transform_train_list
+    transform_train_list = transform_train_list + [transforms.Resize((opt.h,opt.w), interpolation=3)]  # 图像要插值成为256×128大小的图像。
+    transform_train_list = transform_train_list + [transforms.Pad(opt.pad)] if opt.pad > 0 else transform_train_list  # opt.pad=0,所以不进行图像填充。
+    transform_train_list = transform_train_list + [transforms.RandomCrop((opt.h,opt.w))] if opt.pad > 0 else transform_train_list  # 控制随机裁剪图片。
+    #  这里因为opt.pad=0，所以并不进行设置。
     transform_train_list = transform_train_list + [transforms.RandomHorizontalFlip()] if opt.flip else transform_train_list
-    transform_train_list = transform_train_list + [transforms.ToTensor()]
+    # 控制随机水平翻转
+    transform_train_list = transform_train_list + [transforms.ToTensor()]  # 将数据转换为tensor，并归一化至【0,1】范围内。
     transform_train_list = transform_train_list + [transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
 
     transform_val_list = []  # List used to store the different class instances for evaluation.
@@ -263,23 +266,31 @@ def data_settings(opt):
         transform_train_list = transform_train_list +  [RandomErasing(probability = opt.all_erasing_p, mean=[0.0, 0.0, 0.0])]
     if opt.color_jitter:     # false
         transform_train_list = [transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0)] + transform_train_list
-    data_transforms = {}
-    for x in opt.phase_data:
-        if x == opt.phase_train:
-            data_transforms[x] = transforms.Compose(transform_train_list)
+
+
+    # 将'train_all', 'gallery', 'query'三类数据集合的 transform属性存储在一个字典数据结构data_transforms 中。
+    data_transforms = {}  # Initial dict.
+    for x in opt.phase_data:    # 'train_all', 'gallery', 'query'
+        if x == opt.phase_train:    # if x == 'train_all'
+            data_transforms[x] = transforms.Compose(transform_train_list)  # initial the class transforms.Compose and form instance.
         else:
-            data_transforms[x] = transforms.Compose(transform_val_list)
+            data_transforms[x] = transforms.Compose(transform_val_list)    # initial transforms.Compose class.
     print('===> [Transform data] ' + str(transform_train_list))
-    data_info = {}
+
+
+    data_info = {}    # Initial dict.
     # if opt.test_tsne and opt.test_on:
-    image_datasets_train_tsne = datasets.ImageFolder(os.path.join(opt.data_dir, opt.data_name, opt.phase_train), data_transforms['query'])
+    # 对dataloader进行初始化。
+    image_datasets_train_tsne = datasets.ImageFolder( os.path.join(opt.data_dir, opt.data_name, opt.phase_train), data_transforms['query'] )
     cnt = 0
-    for i in range(len(image_datasets_train_tsne.targets)):
+    for i in range(   len(  image_datasets_train_tsne.targets  )   ):  # 4120表示所有的图像个数。
         if image_datasets_train_tsne.targets[i] < opt.test_tsne_num:
             cnt += 1
     sampler = DummySampler(image_datasets_train_tsne)
     sampler.num_samples = cnt
     # sampler.num_samples = len(image_datasets_train_tsne.targets)
+
+
     dataloaders_train_tsne = torch.utils.data.DataLoader(image_datasets_train_tsne, batch_size=opt.set_batchsize['query'], shuffle=opt.set_shuffle['query'],
                                               num_workers=opt.set_workers['query'], sampler = sampler, pin_memory=opt.pin_memory, drop_last=opt.set_droplast['query'])
     data_info['train_tsne_cam'], data_info['train_tsne_label'], data_info['train_tsne_modal'] = get_attribute(opt.data_flag, image_datasets_train_tsne.imgs, flag = opt.type_domain_label)

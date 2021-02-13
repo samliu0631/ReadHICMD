@@ -21,7 +21,10 @@ from util_train import weights_init, get_model_list, vgg_preprocess, load_vgg16
 from random_erasing import RandomErasing
 
 class HICMD(nn.Module):
+    # 所有的神经网络模型都要继承 nn.Module.
     def __init__(self, opt):
+        # nn.Module的子类必须实现 __init__()  forward()
+        # 这个函数中定义了HICMED模型中所有需要的层和属性。
         super(HICMD, self).__init__()
 
         # Initialization
@@ -141,7 +144,7 @@ class HICMD(nn.Module):
         all_params.append({'params': list(self.backbone_pro.parameters()), 'lr': opt.lr_backbone * opt.backbone_pro_lr_ratio})
         all_params.append({'params': list(self.combine_weight.parameters()), 'lr': opt.lr_backbone * opt.combine_weight_lr_ratio})
 
-        # Optimizer and scheduler
+        # Optimizer and scheduler   这里定义了优化器的参数。
         self.id_optimizer = optim.SGD(all_params, weight_decay=opt.weight_decay_bb, momentum=opt.momentum,
                                       nesterov=opt.flag_nesterov)
         self.dis_optimizer = torch.optim.Adam([p for p in dis_params if p.requires_grad],
@@ -151,6 +154,7 @@ class HICMD(nn.Module):
                                               lr=opt.lr_gen, betas=(opt.beta1, opt.beta2),
                                               weight_decay=opt.weight_decay_gen)
 
+        # 这里定义了学习率的参数。
         self.id_scheduler = lr_scheduler.StepLR(self.id_optimizer, step_size=opt.step_size_bb, gamma=opt.gamma_bb)
         self.dis_scheduler = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis, gamma=opt.gamma_dis)
         self.gen_scheduler = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen, gamma=opt.gamma_gen)
@@ -941,6 +945,8 @@ class HICMD(nn.Module):
 
 
     def forward(self, opt, input, modal, cam):
+    # The subclass of nn.Module must has the implementation of forward.
+    # 这个函数定义了HICMD模型的前馈过程。
 
         self.eval()
 

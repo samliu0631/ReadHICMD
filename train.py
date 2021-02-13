@@ -37,6 +37,7 @@ torch.cuda.manual_seed_all(opt.random_seed)  # 为所有GPU设置随机数的种
 opt = opt_settings(opt)
 
 # 加载训练数据。
+# 这里已经产生了dataloaders了。
 dataloaders, dataloaders_train_tsne, old_train_dataloader, data_info, data_sample, opt = data_settings(opt)
 opt = opt_test_settings(opt)
 
