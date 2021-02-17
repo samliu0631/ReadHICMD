@@ -28,14 +28,14 @@ class HICMD(nn.Module):
         super(HICMD, self).__init__()
 
         # Initialization
-        self.old_loss_type = {}   # 字典初始化。
+        self.old_loss_type = {}
         self.old_acc_type = {}
         self.old_etc_type = {}
         self.loss_type = {}
         self.acc_type = {}
         self.etc_type = {}
-        self.cnt_cumul = 0               # 用来记录训练次数。
-        self.loss_type['TOTAL'] = 0      #
+        self.cnt_cumul = 0
+        self.loss_type['TOTAL'] = 0
         self.loss_type['TOT_D'] = 0
         self.loss_type['TOT_G'] = 0
         self.loss_type['TOT_ID'] = 0
@@ -49,33 +49,28 @@ class HICMD(nn.Module):
 
         # Discriminator 鉴别器参数设置。
         dis_params = []
-        self.dis_RGB = Discriminator(opt)               # 根据ｏｐｔ来进行RGB鉴别器初始化。
-        dis_params += list(self.dis_RGB.parameters())   # dis_params  ：List, store the parameters of RGB and IR Discriminator.
-        self.dis_IR = copy.deepcopy(self.dis_RGB)       # deepcopy: the new object is a total new one with no relation with the reference.
-        dis_params += list(self.dis_IR.parameters())    # 记录鉴别器所有参数，这写参数都是需要进行训练优化的。
+        self.dis_RGB = Discriminator(opt)
+        dis_params += list(self.dis_RGB.parameters())
+        self.dis_IR = copy.deepcopy(self.dis_RGB)
+        dis_params += list(self.dis_IR.parameters())
 
-        # Generator (attribute encoder)　属性编码器
+        # Generator (attribute encoder)
         gen_params = []
-        self.gen_RGB = nn.Module()  # RGB图像产生器。　这里的gen_RGB就是一个相对独立的神经网络。
-        self.gen_IR = nn.Module()   # IR图像产生器。　　gen_IR也是一个独立的神经网络。
-        self.gen_RGB.enc_att = ft_resnet(depth = opt.G_style_resnet_depth, pretrained = opt.G_style_pretrained, stride = opt.stride, partpool = opt.G_style_partpool, pooltype = opt.G_style_typepool, input_channel = opt.G_input_dim)
-        # 这里是ＲＧＢ图像的属性编码器Ea1。注意这里使用了resnet。
-        gen_params += list(self.gen_RGB.enc_att.parameters())    # gen_params记录所有　属性编码器　和　原型编码器　参数。
-
-        # 这里是IR图像的属性编码器Ea2。
+        self.gen_RGB = nn.Module()
+        self.gen_IR = nn.Module()
+        self.gen_RGB.enc_att = ft_resnet(depth = opt.G_style_resnet_depth, pretrained = opt.G_style_pretrained, stride = opt.stride, \
+                                         partpool = opt.G_style_partpool, pooltype = opt.G_style_typepool, input_channel = opt.G_input_dim)
+        gen_params += list(self.gen_RGB.enc_att.parameters())
         self.gen_IR.enc_att = copy.deepcopy(self.gen_RGB.enc_att)
         gen_params += list(self.gen_IR.enc_att.parameters())
 
-        # Generator (prototype encoder)　原型编码器
+        # Generator (prototype encoder)
         bottleneck_dim = opt.G_dim
-        # 初始化ＲＧＢ图像的原型编码器
         self.gen_RGB.enc_pro = ResidualEncoder(n_downsample = opt.G_n_downsamp, n_res = opt.G_n_residual, input_dim = opt.G_input_dim, \
                                                 bottleneck_dim = bottleneck_dim, norm = opt.G_enc_res_norm, activ = opt.G_act, pad_type = opt.G_pad_type, \
                                                 tanh = opt.G_tanh, res_type = opt.G_res_type, enc_type = opt.G_enc_type, flag_ASPP = opt.G_ASPP, \
                                                 init = opt.G_init, w_lrelu = opt.G_w_lrelu)
         gen_params += list(self.gen_RGB.enc_pro.parameters())
-
-        # 初始化ＩＲ图像的原型编码器。
         self.gen_IR.enc_pro = copy.deepcopy(self.gen_RGB.enc_pro)
         gen_params += list(self.gen_IR.enc_pro.parameters())
 
@@ -94,7 +89,7 @@ class HICMD(nn.Module):
 
 
         # attribute indexing
-        dim = self.gen_RGB.enc_att.output_dim   # 获得ＲＧＢ图像的属性编码其的输出维度。
+        dim = self.gen_RGB.enc_att.output_dim
         # self.att_pose_idx = []
         # for i in range(opt.G_n_residual):
         #     for j in range(round(dim/opt.G_n_residual*opt.att_pose_ratio)):
@@ -103,7 +98,7 @@ class HICMD(nn.Module):
         # self.att_pose_dim = len(self.att_pose_idx)
         # self.att_illum_dim = len(self.att_illum_idx)
 
-        self.att_style_idx = []    # 计算
+        self.att_style_idx = []
         for i in range(opt.G_n_residual):
             for j in range(round(dim / opt.G_n_residual * opt.att_style_ratio)):
                 self.att_style_idx.append(j + i * round(dim / opt.G_n_residual))
@@ -422,7 +417,7 @@ class HICMD(nn.Module):
 
     def gen_update(self, x_a, x_b, neg_a, neg_b, opt, phase):
 
-        # 这个函数是go_train中主要调用的函数。
+
         if self.case_a == 'RGB':
             self.dis_a = self.dis_RGB
             self.gen_a = self.gen_RGB
@@ -475,7 +470,7 @@ class HICMD(nn.Module):
                 self.gen_optimizer.zero_grad()
                 self.zero_grad_G = False
 
-            c_a = self.gen_a.enc_pro(Gx_a)     # 这里应该就就是前馈过程的一部分。
+            c_a = self.gen_a.enc_pro(Gx_a)
             c_b = self.gen_b.enc_pro(Gx_b)
             s_a = self.gen_a.enc_att(Gx_a)
             s_b = self.gen_b.enc_att(Gx_b)

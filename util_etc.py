@@ -297,14 +297,16 @@ def data_settings(opt):
     dataloaders_train_tsne = torch.utils.data.DataLoader(image_datasets_train_tsne, batch_size=opt.set_batchsize['query'], shuffle=opt.set_shuffle['query'],
                                               num_workers=opt.set_workers['query'], sampler = sampler, pin_memory=opt.pin_memory, drop_last=opt.set_droplast['query'])
     data_info['train_tsne_cam'], data_info['train_tsne_label'], data_info['train_tsne_modal'] = get_attribute(opt.data_flag, image_datasets_train_tsne.imgs, flag = opt.type_domain_label)
+    # 使用字典存储data_info.
+
     # opt.data_flag= 5 ,
     # image_datasets_train_tsne.imgs: 图片的目录和类型。
     # opt.type_domain_label = 0
 
-    train_label_all = data_info['train_tsne_label'] # all labels
-    train_modal_all = data_info['train_tsne_modal']
-    train_cam_all = data_info['train_tsne_cam']
-
+    train_label_all = data_info['train_tsne_label']   # all labels  for trained images.
+    train_modal_all = data_info['train_tsne_modal']   # all model for trained images.
+    train_cam_all = data_info['train_tsne_cam']       # all cam for trained images.
+    # 对data_info进行裁剪，只保留前300个图像对应的数据。  cnt=300.
     data_info['train_tsne_cam'] = data_info['train_tsne_cam'][:cnt]
     data_info['train_tsne_label'] = data_info['train_tsne_label'][:cnt]
     data_info['train_tsne_modal'] = data_info['train_tsne_modal'][:cnt]
@@ -313,11 +315,11 @@ def data_settings(opt):
     #     dataloaders_train_tsne = []
     #---------------------------------------# Load data
     since = time.time()
-    image_datasets = {x: datasets.ImageFolder(os.path.join(opt.data_dir, opt.data_name, x), data_transforms[x]) for x in opt.phase_data}
+    image_datasets = { x: datasets.ImageFolder(    os.path.join(opt.data_dir, opt.data_name, x),   data_transforms[x]     )   for x in opt.phase_data}
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.set_batchsize[x], shuffle=opt.set_shuffle[x],
                                                   num_workers=opt.set_workers[x], pin_memory=opt.pin_memory, drop_last=opt.set_droplast[x]) for x in opt.phase_data}
     if opt.test_on:
-        data_info['gallery_cam'], data_info['gallery_label'], data_info['gallery_modal'] = get_attribute(opt.data_flag, image_datasets['gallery'].imgs, flag = opt.type_domain_label)
+        data_info['gallery_cam'], data_info['gallery_label'], data_info['gallery_modal'] = get_attribute(  opt.data_flag,  image_datasets['gallery'].imgs,  flag = opt.type_domain_label )
         data_info['query_cam'], data_info['query_label'], data_info['query_modal'] = get_attribute(opt.data_flag, image_datasets['query'].imgs, flag = opt.type_domain_label)
         if opt.test_multi:
             data_info['mquery_cam'], data_info['mquery_label'], data_info['mquery_modal'] = get_attribute(opt.data_flag, image_datasets['multi-query'].imgs, flag = opt.type_domain_label)
