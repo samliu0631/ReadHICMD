@@ -27,7 +27,7 @@ class HICMD(nn.Module):
         # 这个函数中定义了HICMED模型中所有需要的层和属性。
         super(HICMD, self).__init__()
 
-        # Initialization
+        #******* Initialization **********************************************************************
         self.old_loss_type = {}   # 字典初始化。
         self.old_acc_type = {}
         self.old_etc_type = {}
@@ -47,41 +47,37 @@ class HICMD(nn.Module):
         self.cnt_batch_ID = 0
         opt.old_apply_pos_cnt = opt.apply_pos_cnt
 
-        # Discriminator 鉴别器参数设置。
+        #******Discriminator 鉴别器参数设置。****************************************************************
         dis_params = []
         self.dis_RGB = Discriminator(opt)               # 根据ｏｐｔ来进行RGB鉴别器初始化。
         dis_params += list(self.dis_RGB.parameters())   # dis_params  ：List, store the parameters of RGB and IR Discriminator.
         self.dis_IR = copy.deepcopy(self.dis_RGB)       # deepcopy: the new object is a total new one with no relation with the reference.
         dis_params += list(self.dis_IR.parameters())    # 记录鉴别器所有参数，这写参数都是需要进行训练优化的。
 
-        # Generator (attribute encoder)　属性编码器
+        #********** Generator (attribute encoder)　属性编码器*************************************************************
         gen_params = []
         self.gen_RGB = nn.Module()  # RGB图像产生器。　这里的gen_RGB就是一个相对独立的神经网络。
         self.gen_IR = nn.Module()   # IR图像产生器。　　gen_IR也是一个独立的神经网络。
         self.gen_RGB.enc_att = ft_resnet(depth = opt.G_style_resnet_depth, pretrained = opt.G_style_pretrained, stride = opt.stride, partpool = opt.G_style_partpool, pooltype = opt.G_style_typepool, input_channel = opt.G_input_dim)
-        # 这里是ＲＧＢ图像的属性编码器Ea1。注意这里使用了resnet。
-        gen_params += list(self.gen_RGB.enc_att.parameters())    # gen_params记录所有　属性编码器　和　原型编码器　参数。
-
-        # 这里是IR图像的属性编码器Ea2。
-        self.gen_IR.enc_att = copy.deepcopy(self.gen_RGB.enc_att)
+        # 这里是RGB图像的属性编码器Ea1。注意这里使用了resnet。
+        gen_params += list(self.gen_RGB.enc_att.parameters())    # gen_params记录所有　属性编码器　和　原型编码器　参数。        
+        self.gen_IR.enc_att = copy.deepcopy(self.gen_RGB.enc_att)  # 这里是IR图像的属性编码器Ea2。
         gen_params += list(self.gen_IR.enc_att.parameters())
 
-        # Generator (prototype encoder)　原型编码器
-        bottleneck_dim = opt.G_dim
-        # 初始化ＲＧＢ图像的原型编码器
+        #***************** Generator (prototype encoder)　原型编码器***************************************
+        bottleneck_dim = opt.G_dim            
         self.gen_RGB.enc_pro = ResidualEncoder(n_downsample = opt.G_n_downsamp, n_res = opt.G_n_residual, input_dim = opt.G_input_dim, \
                                                 bottleneck_dim = bottleneck_dim, norm = opt.G_enc_res_norm, activ = opt.G_act, pad_type = opt.G_pad_type, \
                                                 tanh = opt.G_tanh, res_type = opt.G_res_type, enc_type = opt.G_enc_type, flag_ASPP = opt.G_ASPP, \
-                                                init = opt.G_init, w_lrelu = opt.G_w_lrelu)
+                                                init = opt.G_init, w_lrelu = opt.G_w_lrelu)  # 初始化RGB图像的原型编码器
         gen_params += list(self.gen_RGB.enc_pro.parameters())
-
-        # 初始化ＩＲ图像的原型编码器。
-        self.gen_IR.enc_pro = copy.deepcopy(self.gen_RGB.enc_pro)
+        self.gen_IR.enc_pro = copy.deepcopy(self.gen_RGB.enc_pro)  #初始化ＩＲ图像的原型编码器。
         gen_params += list(self.gen_IR.enc_pro.parameters())
 
-        # Decoder
+        # ********************** Decoder *********************************************************
+        #  因为红外可见光被光照属性编码进行了描述，所以这里的解码器只有一个，IR和RGB都是用的相同的解码器。
         self.num_mlp_layer = 4
-        input_dim = round(self.gen_RGB.enc_att.output_dim / self.num_mlp_layer)
+        input_dim = round(self.gen_RGB.enc_att.output_dim / self.num_mlp_layer)  # 解码器的输入维度 取决于  属性解码器。
         self.flag_mlp = 2
         self.gen_RGB.dec = ResidualDecoder(n_upsample=opt.G_n_downsamp, n_res=opt.G_n_residual, input_dim=self.gen_RGB.enc_pro.output_dim, \
                                            output_dim=opt.G_input_dim, dropout=opt.G_dropout, res_norm=opt.G_dec_res_norm, activ=opt.G_act, \
@@ -89,20 +85,12 @@ class HICMD(nn.Module):
                                            dec_type=opt.G_dec_type, init=opt.G_init, w_lrelu = opt.G_w_lrelu, \
                                            mlp_input = input_dim, mlp_output = 2 * self.gen_RGB.enc_pro.output_dim, mlp_dim = opt.G_mlp_dim, \
                                            mlp_n_blk = opt.G_mlp_n_blk, mlp_norm = 'none', mlp_activ = opt.G_act)
-        gen_params += list(self.gen_RGB.dec.parameters())
+        gen_params += list(self.gen_RGB.dec.parameters())   # gen_params: 记录了ID-PIG中所有产生器的参数。
         self.gen_IR.dec = self.gen_RGB.dec
 
-
-        # attribute indexing
-        dim = self.gen_RGB.enc_att.output_dim   # 获得ＲＧＢ图像的属性编码其的输出维度。
-        # self.att_pose_idx = []
-        # for i in range(opt.G_n_residual):
-        #     for j in range(round(dim/opt.G_n_residual*opt.att_pose_ratio)):
-        #         self.att_pose_idx.append(j + i * round(dim/opt.G_n_residual))
-        # self.att_illum_idx = [i for i in range(dim) if not i in self.att_pose_idx]
-        # self.att_pose_dim = len(self.att_pose_idx)
-        # self.att_illum_dim = len(self.att_illum_idx)
-
+        # **********attribute indexing*************************************************************************
+        dim = self.gen_RGB.enc_att.output_dim   # 获得RGB图像的属性编码其的输出维度。
+        
         self.att_style_idx = []    # 计算属性编码中   风格属性编码 和  ID无关属性编码（光照属性编码，姿态属性编码）的位置。
         # opt.G_n_residual = 4  number of residual blocks in content encoder/decoder
         for i in range(opt.G_n_residual):
@@ -130,9 +118,9 @@ class HICMD(nn.Module):
         opt.att_style_idx = self.att_style_idx     # 在opt中记录风格属性的索引编号。
         opt.att_ex_idx = self.att_ex_idx           # 在opt中记录id无关属性的索引号。
 
-        # prototype backbone
+        #***** prototype backbone **************************************************************************************
         id_dim = 0
-        input_dim = self.gen_RGB.enc_pro.output_dim
+        input_dim = self.gen_RGB.enc_pro.output_dim   # 输入维度为  原型编码器的 输出维度。
         self.backbone_pro = ft_resnet2(input_dim = input_dim, depth = opt.backbone_pro_resnet_depth, stride = opt.stride,\
                                                max_num_conv = opt.backbone_pro_max_num_conv, max_ouput_dim = opt.backbone_pro_max_ouput_dim, \
                                                pretrained = opt.backbone_pro_pretrained, partpool = opt.backbone_pro_partpool, pooltype = opt.backbone_pro_typepool)
@@ -150,25 +138,30 @@ class HICMD(nn.Module):
         all_params.append({'params': list(self.backbone_pro.parameters()), 'lr': opt.lr_backbone * opt.backbone_pro_lr_ratio})
         all_params.append({'params': list(self.combine_weight.parameters()), 'lr': opt.lr_backbone * opt.combine_weight_lr_ratio})
 
-        # Optimizer and scheduler   这里定义了优化器的参数。
+        #******************Optimizer and scheduler***************************************
+
+        # 这里定义了优化器和调度器。
         self.id_optimizer = optim.SGD(all_params, weight_decay=opt.weight_decay_bb, momentum=opt.momentum,
                                       nesterov=opt.flag_nesterov)
+        # 根据dis_params 设置 鉴别器的优化器和调度器                                      
         self.dis_optimizer = torch.optim.Adam([p for p in dis_params if p.requires_grad],
                                               lr=opt.lr_dis, betas=(opt.beta1, opt.beta2),
-                                              weight_decay=opt.weight_decay_dis)
+                                              weight_decay=opt.weight_decay_dis)     
+        # 根据 gen_params 设置产生器的优化器和调度器。                                              
         self.gen_optimizer = torch.optim.Adam([p for p in gen_params if p.requires_grad],
                                               lr=opt.lr_gen, betas=(opt.beta1, opt.beta2),
                                               weight_decay=opt.weight_decay_gen)
 
-        # 这里定义了学习率的参数。
+        #****************这里定义了学习率的参数。*******************************************************
+
         self.id_scheduler = lr_scheduler.StepLR(self.id_optimizer, step_size=opt.step_size_bb, gamma=opt.gamma_bb)
         self.dis_scheduler = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis, gamma=opt.gamma_dis)
         self.gen_scheduler = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen, gamma=opt.gamma_gen)
 
         # set GPU
         if opt.use_gpu:
-            self.id_classifier = self.id_classifier.cuda()
-            self.backbone_pro = self.backbone_pro.cuda()
+            self.id_classifier = self.id_classifier.cuda()   # 将模型移到cuda上。
+            self.backbone_pro = self.backbone_pro.cuda()     
             self.combine_weight = self.combine_weight.cuda()
             self.gen_RGB = self.gen_RGB.cuda()
             self.gen_IR = self.gen_IR.cuda()
@@ -177,13 +170,13 @@ class HICMD(nn.Module):
             print('===> [Start training]' + '-' * 30)
             self.CE_criterion = nn.CrossEntropyLoss()
             self.NLL_criterion = nn.NLLLoss()
-            self.etc_type['D_lr'] = self.dis_optimizer.param_groups[0]['lr']
-            self.etc_type['G_lr'] = self.gen_optimizer.param_groups[0]['lr']
+            self.etc_type['D_lr'] = self.dis_optimizer.param_groups[0]['lr']   # 优化器的 参数组。
+            self.etc_type['G_lr'] = self.gen_optimizer.param_groups[0]['lr']   
             self.etc_type['ID_lr'] = self.id_optimizer.param_groups[0]['lr']
 
         self.edge = to_edge
         self.single = to_gray(False)
-        self.rand_erasing = RandomErasing(probability=opt.CE_erasing_p, mean=[0.0, 0.0, 0.0])
+        self.rand_erasing = RandomErasing(probability=opt.CE_erasing_p, mean=[0.0, 0.0, 0.0])  # 设置随机擦除模型。
 
     def go_train(self, data, opt, phase, cnt, epoch):
         # data:一共6个元素，每个元素的尺度是 1×3×256×128
@@ -980,9 +973,9 @@ class HICMD(nn.Module):
         Gx_b_raw = Gx_b.clone()
 
         if is_RGB:
-            c_a = self.gen_RGB.enc_pro(Gx_a)
+            c_a = self.gen_RGB.enc_pro(Gx_a)  # 调用RGB原型编码器进行前馈。
         if is_IR:
-            c_b = self.gen_IR.enc_pro(Gx_b)
+            c_b = self.gen_IR.enc_pro(Gx_b)   # 调用IR原型编码器进行前馈。
 
         new_shape = [len(modal)]
         if is_RGB:
@@ -1003,9 +996,9 @@ class HICMD(nn.Module):
         s_vec = []
 
         if is_RGB:
-            s_a_mat, s_a = self.gen_RGB.enc_att(Gx_a, flag_raw=True)
+            s_a_mat, s_a = self.gen_RGB.enc_att(Gx_a, flag_raw=True)   # 调用RGB属性编码器进行前馈。
         if is_IR:
-            s_b_mat, s_b = self.gen_IR.enc_att(Gx_b, flag_raw=True)
+            s_b_mat, s_b = self.gen_IR.enc_att(Gx_b, flag_raw=True)    # 调用IR属性编码器进行前馈。
 
         if is_RGB:
             new_shape = [len(modal)]
@@ -1036,7 +1029,7 @@ class HICMD(nn.Module):
         c_mat = []
         c_vec = []
 
-        c_id, c_mat = self.backbone_pro(c_id, multi_output = True)
+        c_id, c_mat = self.backbone_pro(c_id, multi_output = True)   # 进行原型编码的backbone。
         c_vec = c_id
 
         s_id_all = s_id

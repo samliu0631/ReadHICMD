@@ -294,7 +294,7 @@ class ResidualDecoder(nn.Module):
 
         self.assign_adain_params(adain_params_w, adain_params_b, self.model, output_dim)
 
-        output = self.model(x)
+        output = self.model(x)  # 进行前馈。就是调用进行图像的生成。
         return output
 
 
