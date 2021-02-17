@@ -103,13 +103,14 @@ class HICMD(nn.Module):
         # self.att_pose_dim = len(self.att_pose_idx)
         # self.att_illum_dim = len(self.att_illum_idx)
 
-        self.att_style_idx = []    # 计算
+        self.att_style_idx = []    # 计算属性编码中   风格属性编码 和  ID无关属性编码（光照属性编码，姿态属性编码）的位置。
+        # opt.G_n_residual = 4  number of residual blocks in content encoder/decoder
         for i in range(opt.G_n_residual):
             for j in range(round(dim / opt.G_n_residual * opt.att_style_ratio)):
                 self.att_style_idx.append(j + i * round(dim / opt.G_n_residual))
-        self.att_ex_idx = [i for i in range(dim) if not i in self.att_style_idx]
+        self.att_ex_idx = [i for i in range(dim) if not i in self.att_style_idx]  # 获得ID无关属性的索引编号。  Aex = [Ac ; Ap]
 
-        self.att_pose_idx = []
+        self.att_pose_idx = []    # 获取id无关属性中 姿态属性的索引编号。
         for i in range(opt.G_n_residual):
             for j in range(round(
                     len(self.att_ex_idx) / opt.G_n_residual * opt.att_pose_ratio)):
@@ -117,17 +118,17 @@ class HICMD(nn.Module):
                     len(self.att_ex_idx) / opt.G_n_residual)])
         self.att_illum_idx = [self.att_ex_idx[i] for i in
                                     range(len(self.att_ex_idx)) if
-                                    not self.att_ex_idx[i] in self.att_pose_idx]
+                                    not self.att_ex_idx[i] in self.att_pose_idx]   # 获取id无关属性中 光照属性的索引编号。
 
-        self.att_style_dim = len(self.att_style_idx)
-        self.att_ex_dim = len(self.att_ex_idx)
-        self.att_pose_dim = len(self.att_pose_idx)
-        self.att_illum_dim = len(self.att_illum_idx)
+        self.att_style_dim = len(self.att_style_idx)   # 获取风格属性的维度。
+        self.att_ex_dim = len(self.att_ex_idx)         # 获得ID无关属性的维度。 该维度等于姿态属性维度和 光照属性维度的加和。
+        self.att_pose_dim = len(self.att_pose_idx)     # 获得姿态属性的维度。
+        self.att_illum_dim = len(self.att_illum_idx)   # 获得光照属性的维度。
 
-        opt.att_pose_idx = self.att_pose_idx
-        opt.att_illum_idx = self.att_illum_idx
-        opt.att_style_idx = self.att_style_idx
-        opt.att_ex_idx = self.att_ex_idx
+        opt.att_pose_idx = self.att_pose_idx       # 在opt中记录姿态属性的索引编号。 
+        opt.att_illum_idx = self.att_illum_idx     # 在opt中记录光照属性的索引编号。
+        opt.att_style_idx = self.att_style_idx     # 在opt中记录风格属性的索引编号。
+        opt.att_ex_idx = self.att_ex_idx           # 在opt中记录id无关属性的索引号。
 
         # prototype backbone
         id_dim = 0
