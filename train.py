@@ -63,7 +63,7 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
 
                 # main iteration
                 trainer.go_train(data, opt, phase, cnt, epoch)  # 主要的训练过程。
-                epoch_cnt = trainer.cnt_cumul   # 记录训练的次数。
+                epoch_cnt = trainer.cnt_cumul                   # 记录训练的次数。
 
                 # Print, record, and plot the training results
                 if ( (cnt + 1) % opt.cnt_print_loss == 0  )   or   (cnt == len(dataloaders[phase]) - 1) :

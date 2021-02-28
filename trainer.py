@@ -49,7 +49,7 @@ class HICMD(nn.Module):
 
         #******Discriminator 鉴别器参数设置。****************************************************************
         dis_params = []
-        self.dis_RGB = Discriminator(opt)               # 根据ｏｐｔ来进行RGB鉴别器初始化。
+        self.dis_RGB = Discriminator(opt)               # 根据opt来进行RGB鉴别器初始化。
         dis_params += list(self.dis_RGB.parameters())   # dis_params  ：List, store the parameters of RGB and IR Discriminator.
         self.dis_IR = copy.deepcopy(self.dis_RGB)       # deepcopy: the new object is a total new one with no relation with the reference.
         dis_params += list(self.dis_IR.parameters())    # 记录鉴别器所有参数，这写参数都是需要进行训练优化的。
@@ -71,7 +71,7 @@ class HICMD(nn.Module):
                                                 tanh = opt.G_tanh, res_type = opt.G_res_type, enc_type = opt.G_enc_type, flag_ASPP = opt.G_ASPP, \
                                                 init = opt.G_init, w_lrelu = opt.G_w_lrelu)  # 初始化RGB图像的原型编码器
         gen_params += list(self.gen_RGB.enc_pro.parameters())
-        self.gen_IR.enc_pro = copy.deepcopy(self.gen_RGB.enc_pro)  #初始化ＩＲ图像的原型编码器。
+        self.gen_IR.enc_pro = copy.deepcopy(self.gen_RGB.enc_pro)  #初始化IR图像的原型编码器。
         gen_params += list(self.gen_IR.enc_pro.parameters())
 
         # ********************** Decoder *********************************************************
@@ -185,6 +185,8 @@ class HICMD(nn.Module):
             self.cnt_cumul += 1         # 训练次数累加计数。
         pred_labels = f = pf = nf = []  # initialize 初始化为空的列表。
         _, pos, neg, attribute, attribute_pos, attribute_neg, labels = self.data_variable(opt, data)   # 从输入数据中分离出不同的变量类型。
+        # pos表示正面例子  neg表示贩卖你例子。
+
         self.is_pos = True if len(pos) > 0 else False  # is_pos用来判断 是否存在有效的pos    pos.shape = 1*8*3*256*128
         self.is_neg = True if len(neg) > 0 else False  # is_neq用来判断 是否存在有效的neg。  neg.shape = 1*4*3*256*128
 
@@ -199,37 +201,37 @@ class HICMD(nn.Module):
         pos_b1_idx = [x for x in range(num_pos) if x % 4 == 2]   # pos_b1_idx = [2,6]
         pos_b2_idx = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7]
 
-        x_a1 = pos_all[pos_a1_idx]    # 获取pos_all中 第0,4个元素。
+        x_a1 = pos_all[pos_a1_idx]    # 获取pos_all中 第0,4个元素。   这个x_a1, x_a2 表示的是3*256*128的图像。和文献第4章对应。
         x_a2 = pos_all[pos_a2_idx]    # 获取pos_all中 第1,5的元素。
         x_b1 = pos_all[pos_b1_idx]    # 获取pos_all中 第2,6的元素。
         x_b2 = pos_all[pos_b2_idx]    # 获取pos_all中 第3,7的元素。
 
-        labels_a1 = pos_label_all[pos_a1_idx]    # 获取pos_label_all中 第0,4的元素。
+        labels_a1 = pos_label_all[pos_a1_idx]    # 获取pos_label_all中 第0,4的元素。    这里的label对应标签，也就是图片所在文件夹的编号。
         labels_a2 = pos_label_all[pos_a2_idx]    # 获取pos_label_all中 第1,5的元素。
         labels_b1 = pos_label_all[pos_b1_idx]    # 获取pos_label_all中 第2,6的元素。
         labels_b2 = pos_label_all[pos_b2_idx]    # 获取pos_label_all中 第3,7的元素。
 
-        modals_a1 = pos_modal_all[pos_a1_idx]    # Get the 0-st 4st element.
-        modals_a2 = pos_modal_all[pos_a2_idx]
+        modals_a1 = pos_modal_all[pos_a1_idx]    # Get the 0-st 4st element.  modal表示对应的图像的模态，即红外还是可见光。
+        modals_a2 = pos_modal_all[pos_a2_idx]    # 用1，0来进行区分。
         modals_b1 = pos_modal_all[pos_b1_idx]
         modals_b2 = pos_modal_all[pos_b2_idx]
 
         cams_a1 = pos_cam_all[pos_a1_idx]   # Get the pos of 0 4 st element.
-        cams_a2 = pos_cam_all[pos_a2_idx]
+        cams_a2 = pos_cam_all[pos_a2_idx]   # 判断相机的类型，用1，0来区分。
         cams_b1 = pos_cam_all[pos_b1_idx]
         cams_b2 = pos_cam_all[pos_b2_idx]
 
         if self.is_neg:              # 如果存在有效的neg则进行赋值，否则置为空列表。
             neg_all = neg[0]         #
-            neg_label_all = attribute_neg['order'][0]    # 获取 neg_label_all
-            neg_cam_all = attribute_neg['cam'][0]        #
-            neg_modal_all = attribute_neg['modal'][0]    #
-            num_neg = neg_all.size(0)
-            neg_a_idx = [x for x in range(num_neg) if x < opt.neg_mini_batch]
+            neg_label_all = attribute_neg['order'][0]    # 获取负样本的标签数据。 neg_label_all
+            neg_cam_all = attribute_neg['cam'][0]        # 获得负样本的相机标签数据。
+            neg_modal_all = attribute_neg['modal'][0]    # 获得负样本的模态数据。
+            num_neg = neg_all.size(0)                    # 负样本的数量。
+            neg_a_idx = [x for x in range(num_neg) if x < opt.neg_mini_batch]   # 根据opt.neg_mini_batch将负样本一分为二 。
             neg_b_idx = [x for x in range(num_neg) if x >= opt.neg_mini_batch]
             neg_a = neg_all[neg_a_idx]
             neg_b = neg_all[neg_b_idx]
-            self.labels_neg_a = neg_label_all[neg_a_idx]
+            self.labels_neg_a = neg_label_all[neg_a_idx]   
             self.labels_neg_b = neg_label_all[neg_b_idx]
         else:
             neg_a = []
@@ -277,16 +279,16 @@ class HICMD(nn.Module):
 
         # Cross-modality  跨域训练。
         if (opt.cnt_initialize_pos < self.cnt_cumul):
-            self.labels_a = labels_a1
-            self.labels_b = labels_b1
-            self.modals_a = modals_a1
+            self.labels_a = labels_a1    # 对label 进行赋值
+            self.labels_b = labels_b1    
+            self.modals_a = modals_a1    # 对modal进行赋值
             self.modals_b = modals_b1
-            self.cams_a = cams_a1
+            self.cams_a = cams_a1        # 对cam进行赋值
             self.cams_b = cams_b1
-            self.case_a = case_a1
-            self.case_b = case_b1
-            self.dis_update(x_a1, x_b1, opt, phase)
-            self.gen_update(x_a1, x_b1, neg_a, neg_b, opt, phase)
+            self.case_a = case_a1        # 'RGB'
+            self.case_b = case_b1        # 'IR'
+            self.dis_update(x_a1, x_b1, opt, phase)                 # 更新鉴别器。
+            self.gen_update(x_a1, x_b1, neg_a, neg_b, opt, phase)   # 对整个模型进行更新。
 
         for key, value in self.loss_type.items():
             self.old_loss_type[key] = self.loss_type[key]
@@ -301,16 +303,16 @@ class HICMD(nn.Module):
 
         # Update discriminator
         if self.case_a == 'RGB':
-            self.dis_a = self.dis_RGB
-            self.gen_a = self.gen_RGB
+            self.dis_a = self.dis_RGB  # 对RGB的鉴别器进行赋值
+            self.gen_a = self.gen_RGB  # 对RGB的生成器进行赋值。
         elif self.case_a == 'IR':
-            self.dis_a = self.dis_IR
-            self.gen_a = self.gen_IR
+            self.dis_a = self.dis_IR   # 对IR的鉴别器进行赋值。 IR和RGB的模型均不相同。
+            self.gen_a = self.gen_IR   # 对IR的鉴别器进行赋值。 
         else:
             assert(False)
 
         if self.case_b == 'RGB':
-            self.dis_b = self.dis_RGB
+            self.dis_b = self.dis_RGB  
             self.gen_b = self.gen_RGB
         elif self.case_b == 'IR':
             self.dis_b = self.dis_IR
@@ -329,8 +331,8 @@ class HICMD(nn.Module):
             Do_dis_update = True
 
         if Do_dis_update:
-            if self.zero_grad_D:
-                self.dis_optimizer.zero_grad()
+            if self.zero_grad_D:  
+                self.dis_optimizer.zero_grad()   # 优化前，把梯度置零。
                 self.zero_grad_D = False
 
             with torch.no_grad():
@@ -344,20 +346,20 @@ class HICMD(nn.Module):
                 Gx_a_raw = Gx_a.clone()
                 Gx_b_raw = Gx_b.clone()
 
-                c_a = self.gen_a.enc_pro(Gx_a)
-                c_b = self.gen_b.enc_pro(Gx_b)
+                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。
+                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。
 
-                s_a = self.gen_a.enc_att(Gx_a)
-                s_b = self.gen_b.enc_att(Gx_b)
+                s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a
+                s_b = self.gen_b.enc_att(Gx_b)  
 
                 s_a2 = s_a.clone()
                 s_b2 = s_b.clone()
-                s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)
+                s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)  # 对属性编码中的ID无关编码进行交换。
 
-                x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)
-                x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)
+                x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)   # 根据x_b生成x_ba。 两者为不同的图像模态。
+                x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)   # 根据x_a生成x_ab。
 
-
+            # 计算损失函数。
             self.loss_dis_a = self.dis_a.calc_dis_loss(x_ba.detach(), Gx_a_raw)  # fake, real image [b x 1 x 64 x 32] matrix LSGAN
             self.loss_dis_b = self.dis_b.calc_dis_loss(x_ab.detach(), Gx_b_raw)
             self.loss_dis_total = (opt.w_gan * self.loss_dis_a + opt.w_gan * self.loss_dis_b)
@@ -373,15 +375,17 @@ class HICMD(nn.Module):
             x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim) # (ID, pose) b, (modality) a
             x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim) # (ID, pose) a, (modality) b
 
-            self.loss_dis_a3 = self.dis_a.calc_dis_loss(x_ba3.detach(), Gx_a_raw)
+            self.loss_dis_a3 = self.dis_a.calc_dis_loss(x_ba3.detach(), Gx_a_raw)   # 计算鉴别器的损失。
             self.loss_dis_b3 = self.dis_b.calc_dis_loss(x_ab3.detach(), Gx_b_raw)
-            self.loss_dis_total += opt.w_gan * (self.loss_dis_a3 + self.loss_dis_b3)
+            self.loss_dis_total += opt.w_gan * (self.loss_dis_a3 + self.loss_dis_b3)   # 记录对抗生成损失。
 
             self.loss_dis_total.backward(retain_graph=False) #*****GPU memory --> 40Mb / ?/ -60Mb
+            # 根据损失函数，进行反向回传。计算discriminator中参数对应于对抗损失函数的梯度。
             self.dis_optimizer.step() #*****GPU memory --> 100Mb / 0
+            # 根据梯度，对鉴别器参数进行优化。
             self.zero_grad_D = True
 
-            self.loss_type['D_a'] = opt.w_gan * self.loss_dis_a.item()  # scalar
+            self.loss_type['D_a'] = opt.w_gan * self.loss_dis_a.item()  # scalar  ######看到这里。
             self.loss_type['D_b'] = opt.w_gan * self.loss_dis_b.item()
             self.loss_type['TOT_D'] = self.loss_dis_total.item()
 
@@ -396,7 +400,7 @@ class HICMD(nn.Module):
                 self.loss_type['TOT_D'] = 0
 
         if self.case_a == 'RGB':
-            self.dis_RGB = self.dis_a
+            self.dis_RGB = self.dis_a  # 将优化更新后的鉴别器传回 原来对应模型变量中。
             self.gen_RGB = self.gen_a
         elif self.case_a == 'IR':
             self.dis_IR = self.dis_a
@@ -947,13 +951,13 @@ class HICMD(nn.Module):
     # The subclass of nn.Module must has the implementation of forward.
     # 这个函数定义了HICMD模型的前馈过程。
 
-        self.eval()
+        self.eval()  #  变换到evaluation阶段。
 
-        modal_np = np.asarray(modal)
+        modal_np = np.asarray(modal)  # modal 记录了
         idx_v = np.where(modal_np == 1)
         idx_t = np.where(modal_np == 0)
-        x_a = input[idx_v]
-        x_b = input[idx_t]
+        x_a = input[idx_v]    # 获取输入的RGB图像
+        x_b = input[idx_t]    # 获取输入的IR图像
 
         is_RGB = False
         is_IR = False
@@ -962,8 +966,8 @@ class HICMD(nn.Module):
         if len(x_b) > 0:
             is_IR = True
 
-        if opt.G_input_dim == 1:
-            Gx_a = self.single(x_a.clone())
+        if opt.G_input_dim == 1:  
+            Gx_a = self.single(x_a.clone())  # 将可见光图像
             Gx_b = self.single(x_b.clone())
         else:
             Gx_a = x_a.clone()
@@ -973,12 +977,12 @@ class HICMD(nn.Module):
         Gx_b_raw = Gx_b.clone()
 
         if is_RGB:
-            c_a = self.gen_RGB.enc_pro(Gx_a)  # 调用RGB原型编码器进行前馈。
+            c_a = self.gen_RGB.enc_pro(Gx_a)  # 调用RGB原型编码器 来对RGB图像进行 原型编码得到 c_a RGB图像的原型编码
         if is_IR:
-            c_b = self.gen_IR.enc_pro(Gx_b)   # 调用IR原型编码器进行前馈。
+            c_b = self.gen_IR.enc_pro(Gx_b)   # 调用IR原型编码器 来对IR图像进行  原型编码。  c_b IR图像的原型编码
 
-        new_shape = [len(modal)]
-        if is_RGB:
+        new_shape = [len(modal)]  # 获得modal的长度，这是一个list变量。
+        if is_RGB:  
             new_shape.extend(c_a.shape[1:])
             c_id = torch.zeros(new_shape, dtype=c_a.dtype)
         else:
@@ -988,17 +992,17 @@ class HICMD(nn.Module):
         if opt.use_gpu:
             c_id = c_id.cuda()
         if is_RGB:
-            c_id[idx_v] = c_a
+            c_id[idx_v] = c_a  # 对c_id进行赋值。 c_a：RGB图像的原型编码
         if is_IR:
-            c_id[idx_t] = c_b
+            c_id[idx_t] = c_b  # 对c_id进行赋值，使用c_b IR图像的原型编码
 
         s_mat = []
         s_vec = []
 
         if is_RGB:
-            s_a_mat, s_a = self.gen_RGB.enc_att(Gx_a, flag_raw=True)   # 调用RGB属性编码器进行前馈。
+            s_a_mat, s_a = self.gen_RGB.enc_att(Gx_a, flag_raw=True)   # 调用RGB属性编码器 对输入的RGB图像进行属性编码 得到 s_a。
         if is_IR:
-            s_b_mat, s_b = self.gen_IR.enc_att(Gx_b, flag_raw=True)    # 调用IR属性编码器进行前馈。
+            s_b_mat, s_b = self.gen_IR.enc_att(Gx_b, flag_raw=True)    # 调用IR属性编码器  对输入的IR图像进行属性编码  得到 s_b。
 
         if is_RGB:
             new_shape = [len(modal)]
@@ -1928,9 +1932,9 @@ def change_two_index(var1, var2, idx1, idx2):
     new_var2 = Variable(torch.Tensor(var2.shape), requires_grad=True).cuda()
     new_var1 = new_var1.type(var1.dtype)
     new_var2 = new_var2.type(var2.dtype)
-    new_var1[:, idx2] = var1[:, idx2]
+    new_var1[:, idx2] = var1[:, idx2]  # 后半部分保持不变。
     new_var2[:, idx2] = var2[:, idx2]
-    new_var1[:, idx1] = var2[:, idx1]
+    new_var1[:, idx1] = var2[:, idx1]  # 前半部分进行交换。  也就是交换属性编码中的 光照编码和姿势编码
     new_var2[:, idx1] = var1[:, idx1]
 
     return new_var1, new_var2
