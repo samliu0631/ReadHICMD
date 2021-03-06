@@ -422,11 +422,11 @@ class HICMD(nn.Module):
 
         # 这个函数是go_train中主要调用的函数。
         if self.case_a == 'RGB':
-            self.dis_a = self.dis_RGB
-            self.gen_a = self.gen_RGB
+            self.dis_a = self.dis_RGB     # RGB图像的鉴别器。
+            self.gen_a = self.gen_RGB     # RGB图像的图像生成器。
         elif self.case_a == 'IR':
-            self.dis_a = self.dis_IR
-            self.gen_a = self.gen_IR
+            self.dis_a = self.dis_IR      # IR图像的鉴别器。
+            self.gen_a = self.gen_IR 
         else:
             assert(False)
 
@@ -475,14 +475,14 @@ class HICMD(nn.Module):
 
             c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码。
             c_b = self.gen_b.enc_pro(Gx_b)
-            s_a = self.gen_a.enc_att(Gx_a)
+            s_a = self.gen_a.enc_att(Gx_a)     # 利用属性编码器 进行编码。
             s_b = self.gen_b.enc_att(Gx_b)
             s_a_id = s_a.clone()
             s_b_id = s_b.clone()
 
             s_a2 = s_a.clone()
             s_b2 = s_b.clone()
-            s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)
+            s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)   # 交换两个属性编码形成 新的属性编码。
 
             x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 使用解码器进行解码，生成图像。
             x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   # 使用解码器进行解码，生成图像。
@@ -494,10 +494,10 @@ class HICMD(nn.Module):
             x_ab_raw = x_ab.clone()
 
             if Do_gen_update:
-                c_b_recon = self.gen_a.enc_pro(x_ba)     # 使用原型 编码器进行前馈编码
-                c_a_recon = self.gen_b.enc_pro(x_ab)     # 使用原型 编码器进行前馈编码
-                s_a_recon = self.gen_a.enc_att(x_ba)     # 使用属性 编码器进行前馈编码
-                s_b_recon = self.gen_b.enc_att(x_ab)     # 使用属性 编码器进行前馈编码
+                c_b_recon = self.gen_a.enc_pro(x_ba)     # 使用原型 编码器进行编码
+                c_a_recon = self.gen_b.enc_pro(x_ab)     # 使用原型 编码器进行编码
+                s_a_recon = self.gen_a.enc_att(x_ba)     # 使用属性 编码器进行编码
+                s_b_recon = self.gen_b.enc_att(x_ab)     # 使用属性 编码器进行编码
                 s_a_recon_id = s_a_recon.clone()
                 s_b_recon_id = s_b_recon.clone()
 
