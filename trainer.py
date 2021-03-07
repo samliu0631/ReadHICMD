@@ -484,26 +484,26 @@ class HICMD(nn.Module):
             s_b2 = s_b.clone()
             s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)   # 交换两个属性编码形成 新的属性编码。
 
-            x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 使用解码器进行解码，生成图像。
-            x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   # 使用解码器进行解码，生成图像。
+            x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 生成图像Xb->a。
+            x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   # 生成图像Xa->a 。
 
-            x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        # 使用解码器进行解码，生成图像。
+            x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        # 生成图像Xa->b。
             x_b_recon = self.gen_b.dec(c_b, s_b, self.gen_b.enc_pro.output_dim)   # 使用解码器进行解码，生成图像。
 
             x_ba_raw = x_ba.clone()
             x_ab_raw = x_ab.clone()
 
             if Do_gen_update:
-                c_b_recon = self.gen_a.enc_pro(x_ba)     # 使用原型 编码器进行编码
-                c_a_recon = self.gen_b.enc_pro(x_ab)     # 使用原型 编码器进行编码
-                s_a_recon = self.gen_a.enc_att(x_ba)     # 使用属性 编码器进行编码
-                s_b_recon = self.gen_b.enc_att(x_ab)     # 使用属性 编码器进行编码
+                c_b_recon = self.gen_a.enc_pro(x_ba)     # 对Xba提取  原型编码
+                c_a_recon = self.gen_b.enc_pro(x_ab)     # 对Xab提取  原型编码
+                s_a_recon = self.gen_a.enc_att(x_ba)     # 对Xba提取  属性编码
+                s_b_recon = self.gen_b.enc_att(x_ab)     # 对Xab提取  属性编码
                 s_a_recon_id = s_a_recon.clone()
                 s_b_recon_id = s_b_recon.clone()
 
                 if opt.w_cycle_x > 0:
-                    x_aba = self.gen_a.dec(c_a_recon, s_a, self.gen_a.enc_pro.output_dim)    # 使用解码器进行解码，生成图像。
-                    x_bab = self.gen_b.dec(c_b_recon, s_b, self.gen_b.enc_pro.output_dim)
+                    x_aba = self.gen_a.dec(c_a_recon, s_a, self.gen_a.enc_pro.output_dim)    # 生成图像Xaba。
+                    x_bab = self.gen_b.dec(c_b_recon, s_b, self.gen_b.enc_pro.output_dim)    # 生成图像Xbab。
 
                 # reconstruction loss (same)
                 self.loss_gen_recon_x_a = self.recon_criterion(x_a_recon, Gx_a_raw)
@@ -891,7 +891,11 @@ class HICMD(nn.Module):
                 self.etc_type['Trip_reg'] = 0
                 self.etc_type['Trip_margin'] = 0
 
+        
+        
+        
         # Update ID-PIG and HFL
+        # 这一步骤主要是对ID-PIG和HFL中的参数进行更新。
 
         if Do_gen_update and Do_id_update:
             self.loss_total = self.loss_gen_total + self.loss_id_total
