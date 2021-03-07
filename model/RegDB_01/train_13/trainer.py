@@ -185,7 +185,7 @@ class HICMD(nn.Module):
             self.cnt_cumul += 1         # 训练次数累加计数。
         pred_labels = f = pf = nf = []  # initialize 初始化为空的列表。
         _, pos, neg, attribute, attribute_pos, attribute_neg, labels = self.data_variable(opt, data)   # 从输入数据中分离出不同的变量类型。
-        # pos表示正面例子  neg表示反面例子。
+        # pos表示正面例子  neg表示贩卖你例子。
 
         self.is_pos = True if len(pos) > 0 else False  # is_pos用来判断 是否存在有效的pos    pos.shape = 1*8*3*256*128
         self.is_neg = True if len(neg) > 0 else False  # is_neq用来判断 是否存在有效的neg。  neg.shape = 1*4*3*256*128
@@ -248,7 +248,7 @@ class HICMD(nn.Module):
             elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID
                 opt.apply_pos_cnt = opt.warm_apply_pos_cnt
             else:
-                opt.apply_pos_cnt = opt.old_apply_pos_cnt  # 执行这一句．
+                opt.apply_pos_cnt = opt.old_apply_pos_cnt
         else:
             opt.old_apply_pos_cnt = opt.apply_pos_cnt
 
@@ -279,8 +279,8 @@ class HICMD(nn.Module):
 
         # Cross-modality  跨域训练。
         if (opt.cnt_initialize_pos < self.cnt_cumul):
-            self.labels_a = labels_a1    # 对label 进行赋值  two labels of two RGB images.
-            self.labels_b = labels_b1    # two lables of IR images.
+            self.labels_a = labels_a1    # 对label 进行赋值
+            self.labels_b = labels_b1    
             self.modals_a = modals_a1    # 对modal进行赋值
             self.modals_b = modals_b1
             self.cams_a = cams_a1        # 对cam进行赋值
@@ -297,7 +297,7 @@ class HICMD(nn.Module):
         for key, value in self.etc_type.items():
             self.old_etc_type[key] = self.etc_type[key]
         if opt.flag_synchronize:
-            torch.cuda.synchronize()  # 等待ＧＰＵ返回结果．再继续．
+            torch.cuda.synchronize()
 
     def dis_update(self, x_a, x_b, opt, phase):
 
@@ -326,7 +326,7 @@ class HICMD(nn.Module):
             elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID
                 Do_dis_update = False
             else:
-                Do_dis_update = True  # 执行这一句．
+                Do_dis_update = True
         else:
             Do_dis_update = True
 
