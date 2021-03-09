@@ -290,6 +290,7 @@ class HICMD(nn.Module):
             self.dis_update(x_a1, x_b1, opt, phase)                 # 更新鉴别器。
             self.gen_update(x_a1, x_b1, neg_a, neg_b, opt, phase)   # 对整个模型进行更新。
 
+        # 存储损失函数结果。
         for key, value in self.loss_type.items():
             self.old_loss_type[key] = self.loss_type[key]
         for key, value in self.acc_type.items():
@@ -297,7 +298,7 @@ class HICMD(nn.Module):
         for key, value in self.etc_type.items():
             self.old_etc_type[key] = self.etc_type[key]
         if opt.flag_synchronize:
-            torch.cuda.synchronize()  # 等待ＧＰＵ返回结果．再继续．
+            torch.cuda.synchronize()  # 等待GPU返回结果．再继续．
 
     def dis_update(self, x_a, x_b, opt, phase):
 
@@ -321,6 +322,7 @@ class HICMD(nn.Module):
             assert(False)
 
         if self.cnt_cumul > 1:
+            # 对于第2次batch开始。
             if self.cnt_cumul < opt.cnt_warmI2I: # only I2I
                 Do_dis_update = True
             elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID
@@ -328,14 +330,16 @@ class HICMD(nn.Module):
             else:
                 Do_dis_update = True  # 执行这一句．
         else:
-            Do_dis_update = True
+            Do_dis_update = True  # 第一次batch训练。
 
         if Do_dis_update:
+            # 始终是要执行这一部分。
             if self.zero_grad_D:  
                 self.dis_optimizer.zero_grad()   # 优化前，把梯度置零。
                 self.zero_grad_D = False
 
             with torch.no_grad():
+                # 这一步类似于try catch
                 if opt.D_input_dim == 1:
                     Gx_a = self.single(x_a.clone())
                     Gx_b = self.single(x_b.clone())
@@ -346,32 +350,35 @@ class HICMD(nn.Module):
                 Gx_a_raw = Gx_a.clone()
                 Gx_b_raw = Gx_b.clone()
 
-                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。
-                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。
+                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
+                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
 
                 s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a
-                s_b = self.gen_b.enc_att(Gx_b)  
+                s_b = self.gen_b.enc_att(Gx_b)  # 得到属性编码  s_b
 
-                s_a2 = s_a.clone()
-                s_b2 = s_b.clone()
-                s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)  # 对属性编码中的ID无关编码进行交换。
-
-                x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)   # 根据x_b生成x_ba。 两者为不同的图像模态。
-                x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)   # 根据x_a生成x_ab。
+                s_a2 = s_a.clone()   # 对属性编码s_a 进行复制。
+                s_b2 = s_b.clone()   # 对属性编码s_b 进行复制。
+                s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)  # 对属性编码中的ID无关编码进行交换。 得到交换后的属性编码。
+                # 注意！！！交换属性编码后，s_a,s_b 对应的编码位置进行了互换！！！
+                # 含义是，在后续图像生成中，交换了姿势和光照编码
+                x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)   # 根据原型编码 c_b  和 属性编码  s_a   生成x_ba。 
+                x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)   # 根据原型编码 c_a  和 属性编码  s_b   生成x_ab。
 
             # 计算损失函数。
+            #x_ba.detach() 表示从当前计算图中分离下来的，但是仍指向原变量的存放位置,不同之处只是requires_grad为false，得到的这个Variable永远不需要计算其梯度，不具有grad。
             self.loss_dis_a = self.dis_a.calc_dis_loss(x_ba.detach(), Gx_a_raw)  # fake, real image [b x 1 x 64 x 32] matrix LSGAN
             self.loss_dis_b = self.dis_b.calc_dis_loss(x_ab.detach(), Gx_b_raw)
             self.loss_dis_total = (opt.w_gan * self.loss_dis_a + opt.w_gan * self.loss_dis_b)
+            # 计算跨域损失函数 L_{cross}^{Recon1}
 
+            s_a3_add = s_a2.clone()   # 对原始的  没有进行交换的 属性编码 进行复制。
+            s_b3_add = s_b2.clone()   # 对原始的  没有进行交换的 属性编码 进行复制。
 
-            s_a3_add = s_a2.clone()
-            s_b3_add = s_b2.clone()
             # pose change
             tmp = self.att_style_idx.copy()
             tmp.extend(self.att_pose_idx)
             s_a3_add, s_b3_add = change_two_index(s_a3_add, s_b3_add, tmp, self.att_illum_idx) # modality remain
-
+            # 这里的含义是，生成图像的时候，改变了姿势，但是光照不改变。即是说生成了同一个域的图像。
             x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim) # (ID, pose) b, (modality) a
             x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim) # (ID, pose) a, (modality) b
 
@@ -379,15 +386,17 @@ class HICMD(nn.Module):
             self.loss_dis_b3 = self.dis_b.calc_dis_loss(x_ab3.detach(), Gx_b_raw)
             self.loss_dis_total += opt.w_gan * (self.loss_dis_a3 + self.loss_dis_b3)   # 记录对抗生成损失。
 
+
+
             self.loss_dis_total.backward(retain_graph=False) #*****GPU memory --> 40Mb / ?/ -60Mb
             # 根据损失函数，进行反向回传。计算discriminator中参数对应于对抗损失函数的梯度。
             self.dis_optimizer.step() #*****GPU memory --> 100Mb / 0
             # 根据梯度，对鉴别器参数进行优化。
             self.zero_grad_D = True
 
-            self.loss_type['D_a'] = opt.w_gan * self.loss_dis_a.item()  # scalar  ######看到这里。
-            self.loss_type['D_b'] = opt.w_gan * self.loss_dis_b.item()
-            self.loss_type['TOT_D'] = self.loss_dis_total.item()
+            self.loss_type['D_a'] = opt.w_gan * self.loss_dis_a.item()  # scalar  
+            self.loss_type['D_b'] = opt.w_gan * self.loss_dis_b.item()  # 存储损失函数
+            self.loss_type['TOT_D'] = self.loss_dis_total.item()       # 存储总的损失函数
 
         else:
             try:
@@ -400,7 +409,7 @@ class HICMD(nn.Module):
                 self.loss_type['TOT_D'] = 0
 
         if self.case_a == 'RGB':
-            self.dis_RGB = self.dis_a  # 将优化更新后的鉴别器传回 原来对应模型变量中。
+            self.dis_RGB = self.dis_a  # 将优化更新后的鉴别器传回 原来的HICMD对象中。
             self.gen_RGB = self.gen_a
         elif self.case_a == 'IR':
             self.dis_IR = self.dis_a
@@ -932,7 +941,7 @@ class HICMD(nn.Module):
 
 
         if self.case_a == 'RGB':
-            self.dis_RGB = self.dis_a
+            self.dis_RGB = self.dis_a   # 将优化后的网络模型 传回 HICMD实例对象中
             self.gen_RGB = self.gen_a
         elif self.case_a == 'IR':
             self.dis_IR = self.dis_a
@@ -942,7 +951,7 @@ class HICMD(nn.Module):
 
 
         if self.case_b == 'RGB':
-            self.dis_RGB = self.dis_b
+            self.dis_RGB = self.dis_b  # 将优化后的网络模型 传回 HICMD实例对象中
             self.gen_RGB = self.gen_b
         elif self.case_b == 'IR':
             self.dis_IR = self.dis_b
@@ -1932,16 +1941,17 @@ def torch_gather(input, index, dim):
     return output
 
 def change_two_index(var1, var2, idx1, idx2):
+    # 创建Variable变量，并移动到cuda上。requires_grad 置为true, 表示该变量要参与反向传播，并计算梯度。
     new_var1 = Variable(torch.Tensor(var1.shape), requires_grad=True).cuda()
     new_var2 = Variable(torch.Tensor(var2.shape), requires_grad=True).cuda()
-    new_var1 = new_var1.type(var1.dtype)
-    new_var2 = new_var2.type(var2.dtype)
-    new_var1[:, idx2] = var1[:, idx2]  # 后半部分保持不变。
+    new_var1 = new_var1.type(var1.dtype)    # 将new_var1 变成和var1 一样的类型?????
+    new_var2 = new_var2.type(var2.dtype)    # 将new_var2 变成和var2 一样的类型。
+    new_var1[:, idx2] = var1[:, idx2]  # 前半部分保持不变。 这是ID相关的属性编码
     new_var2[:, idx2] = var2[:, idx2]
-    new_var1[:, idx1] = var2[:, idx1]  # 前半部分进行交换。  也就是交换属性编码中的 光照编码和姿势编码
+    new_var1[:, idx1] = var2[:, idx1]  # 后半部分进行交换。  也就是交换属性编码中的 光照编码和姿势编码  这是ID无关的属性编码
     new_var2[:, idx1] = var1[:, idx1]
 
-    return new_var1, new_var2
+    return new_var1, new_var2   # 返回交换后的属性编码。
 
 def find_array(idx_all, idx_target):
     new_idx = []

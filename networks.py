@@ -22,6 +22,7 @@ except ImportError: # will be 3.x series
 
 class Discriminator(nn.Module):
     # Multi-scale discriminator architecture
+    # 鉴别器对应的类
     def __init__(self, opt):
         super(Discriminator, self).__init__()
         self.input_dim = opt.D_input_dim
@@ -113,6 +114,7 @@ class Discriminator(nn.Module):
 
     def calc_dis_loss(self, input_fake, input_real):
         # calculate the loss to train D
+        # 这部分的损失函数
         if self.LAMBDA > 0:
             input_real.requires_grad_()
         outs0 = self.forward(input_fake)
