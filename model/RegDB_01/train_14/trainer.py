@@ -124,7 +124,6 @@ class HICMD(nn.Module):
         self.backbone_pro = ft_resnet2(input_dim = input_dim, depth = opt.backbone_pro_resnet_depth, stride = opt.stride,\
                                                max_num_conv = opt.backbone_pro_max_num_conv, max_ouput_dim = opt.backbone_pro_max_ouput_dim, \
                                                pretrained = opt.backbone_pro_pretrained, partpool = opt.backbone_pro_partpool, pooltype = opt.backbone_pro_typepool)
-        # backbone_pro对应的也是一个网络。
         id_dim += self.backbone_pro.output_dim
         id_dim += self.att_style_dim
 
@@ -203,7 +202,7 @@ class HICMD(nn.Module):
         pos_b2_idx = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7]
 
         x_a1 = pos_all[pos_a1_idx]    # 获取pos_all中 第0,4个元素。   这个x_a1, x_a2 表示的是3*256*128的图像。和文献第4章对应。
-        x_a2 = pos_all[pos_a2_idx]    # 获取pos_all中 第1,5的元素。  对于正向例子，每个是2张图。
+        x_a2 = pos_all[pos_a2_idx]    # 获取pos_all中 第1,5的元素。
         x_b1 = pos_all[pos_b1_idx]    # 获取pos_all中 第2,6的元素。
         x_b2 = pos_all[pos_b2_idx]    # 获取pos_all中 第3,7的元素。
 
@@ -223,15 +222,15 @@ class HICMD(nn.Module):
         cams_b2 = pos_cam_all[pos_b2_idx]
 
         if self.is_neg:              # 如果存在有效的neg则进行赋值，否则置为空列表。
-            neg_all = neg[0]         # neg例子对应的是4张
+            neg_all = neg[0]         #
             neg_label_all = attribute_neg['order'][0]    # 获取负样本的标签数据。 neg_label_all
             neg_cam_all = attribute_neg['cam'][0]        # 获得负样本的相机标签数据。
             neg_modal_all = attribute_neg['modal'][0]    # 获得负样本的模态数据。
             num_neg = neg_all.size(0)                    # 负样本的数量。
             neg_a_idx = [x for x in range(num_neg) if x < opt.neg_mini_batch]   # 根据opt.neg_mini_batch将负样本一分为二 。
             neg_b_idx = [x for x in range(num_neg) if x >= opt.neg_mini_batch]
-            neg_a = neg_all[neg_a_idx] # 对应的是2张
-            neg_b = neg_all[neg_b_idx] # 对应的是2张。
+            neg_a = neg_all[neg_a_idx]
+            neg_b = neg_all[neg_b_idx]
             self.labels_neg_a = neg_label_all[neg_a_idx]   
             self.labels_neg_b = neg_label_all[neg_b_idx]
         else:
@@ -288,7 +287,7 @@ class HICMD(nn.Module):
             self.cams_b = cams_b1
             self.case_a = case_a1        # 'RGB'
             self.case_b = case_b1        # 'IR'
-            self.dis_update(x_a1, x_b1, opt, phase)                 # x_a1  x_b1都是2张图片。
+            self.dis_update(x_a1, x_b1, opt, phase)                 # 更新鉴别器。
             self.gen_update(x_a1, x_b1, neg_a, neg_b, opt, phase)   # 对整个模型进行更新。
 
         # 存储损失函数结果。
@@ -430,7 +429,7 @@ class HICMD(nn.Module):
 
     def gen_update(self, x_a, x_b, neg_a, neg_b, opt, phase):
 
-        # 这个函数是go_train中主要调用的函数。   这里的x_a，x_b都是两张图。
+        # 这个函数是go_train中主要调用的函数。
         if self.case_a == 'RGB':
             self.dis_a = self.dis_RGB     # RGB图像的鉴别器。
             self.gen_a = self.gen_RGB     # RGB图像的图像生成器。
@@ -473,7 +472,7 @@ class HICMD(nn.Module):
                 Gx_a = self.single(x_a.clone())
                 Gx_b = self.single(x_b.clone())
             else:
-                Gx_a = x_a  #这里的图像都是两张。
+                Gx_a = x_a
                 Gx_b = x_b
 
             Gx_a_raw = Gx_a.clone()    # 对输入图像进行复制
@@ -483,7 +482,7 @@ class HICMD(nn.Module):
                 self.gen_optimizer.zero_grad()
                 self.zero_grad_G = False
 
-            c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码 生成原型编码c_a。  2 * 256 * 64 * 32
+            c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码 生成原型编码c_a。
             c_b = self.gen_b.enc_pro(Gx_b)     # 利用原型编码器 进行编码 生成原型编码c_b。
             s_a = self.gen_a.enc_att(Gx_a)     # 利用属性编码器 进行编码 生成属性编码s_a。
             s_b = self.gen_b.enc_att(Gx_b)     # 生成属性编码s_b
@@ -492,10 +491,9 @@ class HICMD(nn.Module):
 
             s_a2 = s_a.clone()    # 
             s_b2 = s_b.clone()
-            s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)   # 交换两个属性编码形成 新的属性编码. style-idx：0-255,  512-767, 1024-1279, 1536-1791
-            # att_ex_idx:   256-511, 768-1023, 1280-1535, 1792-2047
+            s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)   # 交换两个属性编码形成 新的属性编码。
             # 进行属性编码的交换。 
-            x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 生成图像Xb->a，这里是两张一起生成。
+            x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 生成图像Xb->a。
             x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   # 生成图像Xa->a 。
 
             x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        # 生成图像Xa->b。
@@ -538,9 +536,9 @@ class HICMD(nn.Module):
                 self.loss_gen_cyc_x = opt.w_cycle_x * (self.loss_gen_cyc_x_a + self.loss_gen_cyc_x_b)
                 self.loss_type['G_cyc_x'] = self.loss_gen_cyc_x.item() if self.loss_gen_cyc_x != 0 else 0
 
-                # attribute code reconstruction loss    下面提取相应的属性和原型编码到对应的向量中。
-                att_style_s_a = torch_gather(s_a_id, self.att_style_idx, 1)                                  # 2个 1024 维度的风格属性编码，ID相关。
-                att_ex_s_a = torch_gather(s_a_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None   # 2个1024维度的ID无关属性编码。
+                # attribute code reconstruction loss
+                att_style_s_a = torch_gather(s_a_id, self.att_style_idx, 1)
+                att_ex_s_a = torch_gather(s_a_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None
                 att_style_s_b = torch_gather(s_b_id, self.att_style_idx, 1)
                 att_ex_s_b = torch_gather(s_b_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None
                 att_style_s_a_recon = torch_gather(s_a_recon_id, self.att_style_idx, 1)
@@ -548,7 +546,7 @@ class HICMD(nn.Module):
                 att_style_s_b_recon = torch_gather(s_b_recon_id, self.att_style_idx, 1)
                 att_ex_s_b_recon = torch_gather(s_b_recon_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None
 
-                self.loss_gen_recon_s = self.recon_criterion(att_ex_s_a, att_ex_s_a_recon)  # 计算L code recon
+                self.loss_gen_recon_s = self.recon_criterion(att_ex_s_a, att_ex_s_a_recon)
                 self.loss_gen_recon_s += self.recon_criterion(att_ex_s_b, att_ex_s_b_recon)
                 self.etc_type['S_remain'] = self.loss_gen_recon_s.item()
 
@@ -585,7 +583,7 @@ class HICMD(nn.Module):
                 self.loss_gen_adv_b3 = self.dis_b.calc_gen_loss(x_ab3)
                 self.loss_gen_adv += opt.w_gan * (self.loss_gen_adv_a3 + self.loss_gen_adv_b3)
 
-                # total ID-PIG loss   计算IDPIG部分总的损失函数值，这个值是一个标量，一个数。
+                # total ID-PIG loss
                 self.loss_gen_total = self.loss_gen_recon_x + self.loss_gen_cyc_x + self.loss_gen_adv + \
                                       self.loss_gen_recon_s + self.loss_gen_kl + self.loss_gen_cross_x
 
@@ -623,29 +621,29 @@ class HICMD(nn.Module):
                 self.zero_grad_ID = False
 
             # Compute prototype and attribute codes (for alternate sampling)
-            x_a_re_id = self.to_re(Gx_a_raw.clone())  # 将输入图像进行随机的擦除部分区域。
-            x_b_re_id = self.to_re(Gx_b_raw.clone())  #
-            x_a_re_id = x_a_re_id.detach()  # 从梯度计算中剥离。
+            x_a_re_id = self.to_re(Gx_a_raw.clone())
+            x_b_re_id = self.to_re(Gx_b_raw.clone())
+            x_a_re_id = x_a_re_id.detach()
             x_b_re_id = x_b_re_id.detach()
 
-            c_a_id = self.gen_a.enc_pro(x_a_re_id)  # 计算原型编码。
-            c_b_id = self.gen_b.enc_pro(x_b_re_id)  # 计算原型编码，得到c_b_id
-            s_a_id = self.gen_a.enc_att(x_a_re_id)  # 计算属性编码
-            s_b_id = self.gen_b.enc_att(x_b_re_id)  # 计算属性编码。
+            c_a_id = self.gen_a.enc_pro(x_a_re_id)
+            c_b_id = self.gen_b.enc_pro(x_b_re_id)
+            s_a_id = self.gen_a.enc_att(x_a_re_id)
+            s_b_id = self.gen_b.enc_att(x_b_re_id)
 
-            x_ab_re_id = self.to_re(x_ab_raw.clone())   # 将Xab进行随机擦除。
+            x_ab_re_id = self.to_re(x_ab_raw.clone())
             x_ba_re_id = self.to_re(x_ba_raw.clone())
             x_ab_re_id = x_ab_re_id.detach()
             x_ba_re_id = x_ba_re_id.detach()
 
-            c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算随机擦除后的XAB的 原型编码
-            c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)   # 计算。。
+            c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)
+            c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)
             s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)
             s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)
 
-            c_a_id = self.backbone_pro(c_a_id)  # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。
+            c_a_id = self.backbone_pro(c_a_id)
             s_a_id_raw = s_a_id.clone()
-            s_a_id = torch_gather(s_a_id, self.att_style_idx, 1)   # 从2048维度的向量中提取1024维度的 风格 属性编码
+            s_a_id = torch_gather(s_a_id, self.att_style_idx, 1)
 
             c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))
             s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))
