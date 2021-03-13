@@ -475,38 +475,38 @@ class HICMD(nn.Module):
                 Gx_a = x_a
                 Gx_b = x_b
 
-            Gx_a_raw = Gx_a.clone()
-            Gx_b_raw = Gx_b.clone()
+            Gx_a_raw = Gx_a.clone()    # 对输入图像进行复制
+            Gx_b_raw = Gx_b.clone()    # 对输入图像进行复制。
 
             if self.zero_grad_G:
                 self.gen_optimizer.zero_grad()
                 self.zero_grad_G = False
 
-            c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码。
-            c_b = self.gen_b.enc_pro(Gx_b)
-            s_a = self.gen_a.enc_att(Gx_a)     # 利用属性编码器 进行编码。
-            s_b = self.gen_b.enc_att(Gx_b)
-            s_a_id = s_a.clone()
-            s_b_id = s_b.clone()
+            c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码 生成原型编码c_a。
+            c_b = self.gen_b.enc_pro(Gx_b)     # 利用原型编码器 进行编码 生成原型编码c_b。
+            s_a = self.gen_a.enc_att(Gx_a)     # 利用属性编码器 进行编码 生成属性编码s_a。
+            s_b = self.gen_b.enc_att(Gx_b)     # 生成属性编码s_b
+            s_a_id = s_a.clone()     # 对属性编码 s_a 进行复制。
+            s_b_id = s_b.clone()     # 对属性编码 s_b 进行复制。
 
-            s_a2 = s_a.clone()
+            s_a2 = s_a.clone()    # 
             s_b2 = s_b.clone()
             s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)   # 交换两个属性编码形成 新的属性编码。
-
+            # 进行属性编码的交换。 
             x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 生成图像Xb->a。
             x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   # 生成图像Xa->a 。
 
             x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        # 生成图像Xa->b。
-            x_b_recon = self.gen_b.dec(c_b, s_b, self.gen_b.enc_pro.output_dim)   # 使用解码器进行解码，生成图像。
+            x_b_recon = self.gen_b.dec(c_b, s_b, self.gen_b.enc_pro.output_dim)   # 生成图像Xb->b。
 
             x_ba_raw = x_ba.clone()
             x_ab_raw = x_ab.clone()
 
             if Do_gen_update:
-                c_b_recon = self.gen_a.enc_pro(x_ba)     # 对Xba提取  原型编码
-                c_a_recon = self.gen_b.enc_pro(x_ab)     # 对Xab提取  原型编码
-                s_a_recon = self.gen_a.enc_att(x_ba)     # 对Xba提取  属性编码
-                s_b_recon = self.gen_b.enc_att(x_ab)     # 对Xab提取  属性编码
+                c_b_recon = self.gen_a.enc_pro(x_ba)     # 对Xba提取  原型编码, 得到原型编码 c_b_recon
+                c_a_recon = self.gen_b.enc_pro(x_ab)     # 对Xab提取  原型编码, 得到原型编码 c_a_recon
+                s_a_recon = self.gen_a.enc_att(x_ba)     # 对Xba提取  属性编码, 得到属性源码 s_a_recon
+                s_b_recon = self.gen_b.enc_att(x_ab)     # 对Xab提取  属性编码, 得到属性源码 s_b_recon.
                 s_a_recon_id = s_a_recon.clone()
                 s_b_recon_id = s_b_recon.clone()
 
