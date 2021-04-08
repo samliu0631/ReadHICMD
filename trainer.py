@@ -630,22 +630,22 @@ class HICMD(nn.Module):
 
             c_a_id = self.gen_a.enc_pro(x_a_re_id)  # 计算原型编码。
             c_b_id = self.gen_b.enc_pro(x_b_re_id)  # 计算原型编码，得到c_b_id
-            s_a_id = self.gen_a.enc_att(x_a_re_id)  # 计算属性编码
+            s_a_id = self.gen_a.enc_att(x_a_re_id)  # 计算图像x_a_re_id的属性编码。
             s_b_id = self.gen_b.enc_att(x_b_re_id)  # 计算属性编码。
 
-            x_ab_re_id = self.to_re(x_ab_raw.clone())   # 将Xab进行随机擦除。
+            x_ab_re_id = self.to_re(x_ab_raw.clone())   # 将Xab进行随机擦除,得到图像x_ab_re_id。
             x_ba_re_id = self.to_re(x_ba_raw.clone())
             x_ab_re_id = x_ab_re_id.detach()
             x_ba_re_id = x_ba_re_id.detach()
 
-            c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算随机擦除后的XAB的 原型编码
+            c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算图像x_ab_re_id的原型编码
             c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)   # 计算。。
             s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)
             s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)
 
             c_a_id = self.backbone_pro(c_a_id)  # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。
-            s_a_id_raw = s_a_id.clone()
-            s_a_id = torch_gather(s_a_id, self.att_style_idx, 1)   # 从2048维度的向量中提取1024维度的 风格 属性编码
+            s_a_id_raw = s_a_id.clone()         # 复制图像x_a_re_id的属性编码s_a_id。
+            s_a_id = torch_gather(s_a_id, self.att_style_idx, 1)   # 从2048维度的向量中提取1024维度的 风格 属性编码.
 
             c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))
             s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))
