@@ -282,8 +282,8 @@ class HICMD(nn.Module):
         if (opt.cnt_initialize_pos < self.cnt_cumul):
             self.labels_a = labels_a1    # 对label 进行赋值  two labels of two RGB images.
             self.labels_b = labels_b1    # two lables of IR images.
-            self.modals_a = modals_a1    # 对modal进行赋值
-            self.modals_b = modals_b1
+            self.modals_a = modals_a1    # 对modal进行赋值 两个RGB模态。
+            self.modals_b = modals_b1    # 两个IR模态。
             self.cams_a = cams_a1        # 对cam进行赋值
             self.cams_b = cams_b1
             self.case_a = case_a1        # 'RGB'

@@ -69,12 +69,13 @@ class IdDis(nn.Module):
         return outputs
 
     def calc_dis_loss_ab(self, input_s, input_t):
+        # input_s: RGB, input_t:IR.
         outs0 = self.forward(input_s)
         outs1 = self.forward(input_t)
         loss = 0
 
         reg = 0.0
-        for it, (out0, out1) in enumerate(zip(outs0, outs1)):
+        for it, (out0, out1) in enumerate(zip(outs0, outs1)): # 因为1个batch有多张图像，所以要逐个计算。
             if self.gan_type == 'lsgan':
                 loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2) # 0 indicates source and 1 indicates target
             elif self.gan_type == 'nsgan':
@@ -88,45 +89,6 @@ class IdDis(nn.Module):
         loss = loss+reg
         return loss, reg, 0.0
 
-    def calc_dis_loss_aa(self, input_s0, input_s1):
-        outs0 = self.forward(input_s0)
-        outs1 = self.forward(input_s1)
-        loss = 0
-
-        reg = 0.0
-        for it, (out0, out1) in enumerate(zip(outs0, outs1)):
-            if self.gan_type == 'lsgan':
-                loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 0)**2)
-            elif self.gan_type == 'nsgan':
-                all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
-                all1 = Variable(torch.zeros_like(out1.data).cuda(), requires_grad=False)
-                loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all0) +
-                                   F.binary_cross_entropy(F.sigmoid(out1), all1))
-            else:
-                assert 0, "Unsupported GAN type: {}".format(self.gan_type)
-
-        loss = loss+reg
-        return loss, reg, 0.0
-
-    def calc_dis_loss_bb(self, input_t0, input_t1):
-        outs0 = self.forward(input_t0)
-        outs1 = self.forward(input_t1)
-        loss = 0
-
-        reg = 0.0
-        for it, (out0, out1) in enumerate(zip(outs0, outs1)):
-            if self.gan_type == 'lsgan':
-                loss += torch.mean((out0 - 1)**2) + torch.mean((out1 - 1)**2)
-            elif self.gan_type == 'nsgan':
-                all0 = Variable(torch.ones_like(out0.data).cuda(), requires_grad=False)
-                all1 = Variable(torch.ones_like(out1.data).cuda(), requires_grad=False)
-                loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all0) +
-                                   F.binary_cross_entropy(F.sigmoid(out1), all1))
-            else:
-                assert 0, "Unsupported GAN type: {}".format(self.gan_type)
-
-        loss = loss+reg
-        return loss, reg, 0.0
 
     def calc_gen_loss(self, input_t):
         outs0 = self.forward(input_t)
@@ -194,62 +156,3 @@ class FcBlock(nn.Module):
             x = self.activation(x)
         return x
 
-##################################################################################
-# Normalization layers
-##################################################################################
-class AdaptiveInstanceNorm2d(nn.Module):
-    def __init__(self, num_features, eps=1e-5, momentum=0.1):
-        super(AdaptiveInstanceNorm2d, self).__init__()
-        self.num_features = num_features
-        self.eps = eps
-        self.momentum = momentum
-        # weight and bias are dynamically assigned
-        self.weight = None
-        self.bias = None
-        # just dummy buffers, not used
-        self.register_buffer('running_mean', torch.zeros(num_features))
-        self.register_buffer('running_var', torch.ones(num_features))
-
-    def forward(self, x):
-        assert self.weight is not None and self.bias is not None, "Please assign weight and bias before calling AdaIN!"
-        b, c = x.size(0), x.size(1)
-        running_mean = self.running_mean.repeat(b).type_as(x)
-        running_var = self.running_var.repeat(b).type_as(x)
-        # Apply instance norm
-        x_reshaped = x.contiguous().view(1, b * c, *x.size()[2:])
-        out = F.batch_norm(
-            x_reshaped, running_mean, running_var, self.weight, self.bias,
-            True, self.momentum, self.eps)
-
-        return out.view(b, c, *x.size()[2:])
-
-    def __repr__(self):
-        return self.__class__.__name__ + '(' + str(self.num_features) + ')'
-
-
-class LayerNorm(nn.Module):
-    def __init__(self, num_features, eps=1e-5, affine=True, fp16=False):
-        super(LayerNorm, self).__init__()
-        self.num_features = num_features
-        self.affine = affine
-        self.eps = eps
-        self.fp16 = fp16
-        if self.affine:
-            self.gamma = nn.Parameter(torch.Tensor(num_features).uniform_())
-            self.beta = nn.Parameter(torch.zeros(num_features))
-    def forward(self, x):
-        shape = [-1] + [1] * (x.dim() - 1)
-        if x.type() == 'torch.cuda.HalfTensor': # For Safety
-            mean = x.view(-1).float().mean().view(*shape)
-            std = x.view(-1).float().std().view(*shape)
-            mean = mean.half()
-            std = std.half()
-        else:
-            mean = x.view(x.size(0), -1).mean(1).view(*shape)
-            std = x.view(x.size(0), -1).std(1).view(*shape)
-
-        x = (x - mean) / (std + self.eps)
-        if self.affine:
-            shape = [1, -1] + [1] * (x.dim() - 2)
-            x = x * self.gamma.view(*shape) + self.beta.view(*shape)
-        return x
