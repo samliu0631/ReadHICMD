@@ -256,7 +256,7 @@ def data_settings(opt):
     transform_train_list = []  # List used to store the different class instances for training.
     transform_train_list = transform_train_list + [transforms.Resize((opt.h,opt.w), interpolation=3)]  # 图像要插值成为256×128大小的图像。
     transform_train_list = transform_train_list + [transforms.Pad(opt.pad)] if opt.pad > 0 else transform_train_list  # opt.pad=0,所以不进行图像填充。
-    transform_train_list = transform_train_list + [transforms.RandomCrop((opt.h,opt.w))] if opt.pad > 0 else transform_train_list  # 控制随机裁剪图片。
+    transform_train_list = transform_train_list + [transforms.RandomCrop((opt.h,opt.w))] if opt.pad > 0 else transform_train_list  # opt.pad=0,所以不进行控制随机裁剪图片。
     #  这里因为opt.pad=0，所以并不进行设置。
     transform_train_list = transform_train_list + [transforms.RandomHorizontalFlip()] if opt.flip else transform_train_list
     # 控制随机水平翻转

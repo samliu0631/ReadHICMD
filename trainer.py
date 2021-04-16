@@ -71,7 +71,7 @@ class HICMD(nn.Module):
         opt.old_apply_pos_cnt = opt.apply_pos_cnt
 
         # added by sam.
-        # Initialization of domain discriminator 域鉴别器。
+        # Initialization of domain discriminator 域鉴别器。用于特征聚类用
         hyperparameters = get_config('market2duke.yaml')
         self.id_dis = IdDis(hyperparameters['gen']['id_dim'], hyperparameters['dis'], fp16=False)
         # 需要调整一下输入的维度。
@@ -127,30 +127,30 @@ class HICMD(nn.Module):
         gen_params += list(self.gen_RGB.dec.parameters())   # gen_params: 记录了ID-PIG中所有产生器的参数。
         self.gen_IR.dec = self.gen_RGB.dec
 
-        # **********attribute indexing*************************************************************************
-        dim = self.gen_RGB.enc_att.output_dim   # 获得RGB图像的属性编码其的输出维度。
+        # **********attribute indexing 属性索引*************************************************************************
+        dim = self.gen_RGB.enc_att.output_dim   # 获得RGB图像的属性编码其的输出维度。 2048
         
-        self.att_style_idx = []    # 计算属性编码中   风格属性编码 和  ID无关属性编码（光照属性编码，姿态属性编码）的位置。
+        self.att_style_idx = []    # 计算属性编码中 1024   ID相关属性编码（风格属性编码）att_style_idx 和  ID无关属性编码att_ex_idx（光照属性编码att_illum_idx，姿态属性编码att_pose_idx）的位置。
         # opt.G_n_residual = 4  number of residual blocks in content encoder/decoder
-        for i in range(opt.G_n_residual):
+        for i in range(opt.G_n_residual):  # 4
             for j in range(round(dim / opt.G_n_residual * opt.att_style_ratio)):
                 self.att_style_idx.append(j + i * round(dim / opt.G_n_residual))
-        self.att_ex_idx = [i for i in range(dim) if not i in self.att_style_idx]  # 获得ID无关属性的索引编号。  Aex = [Ac ; Ap]
+        self.att_ex_idx = [i for i in range(dim) if not i in self.att_style_idx]  # 获得ID无关属性的索引编号。 1024  Aex = [Ac ; Ap]
 
-        self.att_pose_idx = []    # 获取id无关属性中 姿态属性的索引编号。
-        for i in range(opt.G_n_residual):
+        self.att_pose_idx = []    # 获取id无关属性中 姿态属性的索引编号。 512
+        for i in range(opt.G_n_residual):  # 4
             for j in range(round(
                     len(self.att_ex_idx) / opt.G_n_residual * opt.att_pose_ratio)):
                 self.att_pose_idx.append(self.att_ex_idx[j + i * round(
                     len(self.att_ex_idx) / opt.G_n_residual)])
         self.att_illum_idx = [self.att_ex_idx[i] for i in
                                     range(len(self.att_ex_idx)) if
-                                    not self.att_ex_idx[i] in self.att_pose_idx]   # 获取id无关属性中 光照属性的索引编号。
+                                    not self.att_ex_idx[i] in self.att_pose_idx]   # 获取id无关属性中 光照属性的索引编号。 512
 
-        self.att_style_dim = len(self.att_style_idx)   # 获取风格属性的维度。
-        self.att_ex_dim = len(self.att_ex_idx)         # 获得ID无关属性的维度。 该维度等于姿态属性维度和 光照属性维度的加和。
-        self.att_pose_dim = len(self.att_pose_idx)     # 获得姿态属性的维度。
-        self.att_illum_dim = len(self.att_illum_idx)   # 获得光照属性的维度。
+        self.att_style_dim = len(self.att_style_idx)   # 获取风格属性的维度。 1024
+        self.att_ex_dim = len(self.att_ex_idx)         # 获得ID无关属性的维度。 该维度等于姿态属性维度和 光照属性维度的加和。 1024
+        self.att_pose_dim = len(self.att_pose_idx)     # 获得姿态属性的维度。 512
+        self.att_illum_dim = len(self.att_illum_idx)   # 获得光照属性的维度。 512
 
         opt.att_pose_idx = self.att_pose_idx       # 在opt中记录姿态属性的索引编号。 
         opt.att_illum_idx = self.att_illum_idx     # 在opt中记录光照属性的索引编号。
@@ -159,7 +159,7 @@ class HICMD(nn.Module):
 
         #***** prototype backbone **************************************************************************************
         id_dim = 0
-        input_dim = self.gen_RGB.enc_pro.output_dim   # 输入维度为  原型编码器的 输出维度。
+        input_dim = self.gen_RGB.enc_pro.output_dim   # 输入维度为  原型编码器的 输出维度。 256
         self.backbone_pro = ft_resnet2(input_dim = input_dim, depth = opt.backbone_pro_resnet_depth, stride = opt.stride,\
                                                max_num_conv = opt.backbone_pro_max_num_conv, max_ouput_dim = opt.backbone_pro_max_ouput_dim, \
                                                pretrained = opt.backbone_pro_pretrained, partpool = opt.backbone_pro_partpool, pooltype = opt.backbone_pro_typepool)
