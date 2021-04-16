@@ -527,6 +527,7 @@ class DummySampler(Sampler):
 
 
 def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
+    # 从图像中提取特征。
     str_ms = opt.test_ms.split(',')
     ms = []
     for s in str_ms:
@@ -563,6 +564,7 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
 
                 if opt.test_RAM:
                     feature, feature_RAM = trainer.forward(opt, input_img, modals_set[cnt], cams_set[cnt])
+                    # 使用forward函数提取特征。
                 else:
                     feature, _ = trainer.forward(opt, input_img, modals_set[cnt], cams_set[cnt])
 
@@ -816,6 +818,7 @@ def compute_mAP(index, good_index, junk_index):
 
 
 def extract_test_features(opt, trainer, dataloaders, data_info):
+    # 这个函数中把待提取的图像序列中的图像特征都提取了出来。
     if opt.test_only:
         # load_path = opt.test_dir + opt.test_name + '.pth'
         # trainer = load_network(load_path, trainer)
@@ -830,6 +833,7 @@ def extract_test_features(opt, trainer, dataloaders, data_info):
             trainer = trainer.cuda()
     else:
         trainer = trainer.eval()
+
     with torch.no_grad():
         gallery_feature, gallery_feature_raw = \
             extract_feature(opt, trainer, dataloaders['gallery'],'gallery', data_info['gallery_modal'], data_info['gallery_cam'])

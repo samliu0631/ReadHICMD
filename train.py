@@ -191,6 +191,7 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
 
                 # test
                 result, result_RAM, result_multi = extract_test_features(opt, trainer, dataloaders, data_info)
+                # 这个函数中用来提取不同模态图像中的特征编码。
                 if opt.test_tsne:
                     with torch.no_grad():
                         feat_tsne, _ = extract_feature(opt, trainer, dataloaders_train_tsne, 'train_tsne',
@@ -199,6 +200,7 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
                     result_k = result[k]
                     save_path = save_test_features(opt, epoch_cnt, result_k, result_RAM, result_multi, k)
                     CMC_single, ap_single = evaluate_result(opt, epoch_cnt, result_k, result_RAM, result_multi, save_path, k)
+                    # evaluate_result 函数中，计算两个模态的图像特征的距离。
                     pp.record_test_result(CMC_single, ap_single, epoch_cnt, k)
                     if not opt.test_only:
                         pp.draw_and_save_info_test(opt, epoch_cnt, k)

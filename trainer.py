@@ -277,7 +277,8 @@ class HICMD(nn.Module):
             neg_a = []
             neg_b = []
 
-        case_a1 = 'RGB'
+        # 这里作者已经人工设定好了，就是按照 RGB和红外的顺序进行开发。
+        case_a1 = 'RGB'  
         case_a2 = 'RGB'
         case_b1 = 'IR'
         case_b2 = 'IR'
@@ -487,7 +488,7 @@ class HICMD(nn.Module):
         self.id_dis_opt.zero_grad()  # 将id_dis的优化器 梯度清零。
 
         # 这个函数是go_train中主要调用的函数。   这里的x_a，x_b都是两张图。
-        if self.case_a == 'RGB':
+        if self.case_a == 'RGB':  # 作者已经令 case_a = 'RGB'.
             self.dis_a = self.dis_RGB     # RGB图像的鉴别器。
             self.gen_a = self.gen_RGB     # RGB图像的图像生成器。
         elif self.case_a == 'IR':
@@ -500,24 +501,27 @@ class HICMD(nn.Module):
         if self.case_b == 'RGB':
             self.dis_b = self.dis_RGB
             self.gen_b = self.gen_RGB
-        elif self.case_b == 'IR':
-            self.dis_b = self.dis_IR
-            self.gen_b = self.gen_IR
+        elif self.case_b == 'IR':   
+            # 实际执行这部分代码。
+            self.dis_b = self.dis_IR  # IR图像的鉴别器。
+            self.gen_b = self.gen_IR  # IR图像的生成器。
         else:
             assert(False)
 
+        # 这部分主要在于控制，生成器和鉴别器的训练先后次序，即是先训练哪一个，还是一起训练。
+        # 根据参数设置，生成器和鉴别器是一起训练。
         if self.cnt_cumul > 1:
-            if self.cnt_cumul < opt.cnt_warmI2I: # only I2I
+            if self.cnt_cumul < opt.cnt_warmI2I: # only I2I   opt.cnt_warmI2I = 0
                 Do_gen_update = True
                 Do_id_update = False
-            elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID
+            elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID opt.cnt_warmID = 0
                 Do_gen_update = False
                 Do_id_update = True
             else:
-                Do_gen_update = True
+                Do_gen_update = True   # 实际执行这部分。
                 Do_id_update = True
         else:
-            Do_gen_update = True
+            Do_gen_update = True   # 第一次执行执行这部分。
             Do_id_update = True
 
 
@@ -696,15 +700,16 @@ class HICMD(nn.Module):
 
             c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算图像x_ab_re_id的原型编码
             c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)   # 计算。。
-            s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)
-            s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)
+            s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)  # 计算x_ba_re_id属性编码
+            s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)  # 计算属性编码。
 
-            c_a_id = self.backbone_pro(c_a_id)  # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。
+            c_a_id = self.backbone_pro(c_a_id)  
+            # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。   这就是H矩阵。 之所以是2*1024. 因为一个patch 有2个同模态的图像。
             s_a_id_raw = s_a_id.clone()         # 复制图像x_a_re_id的属性编码s_a_id。
             s_a_id = torch_gather(s_a_id, self.att_style_idx, 1)   # 从2048维度的向量中提取1024维度的 风格 属性编码.
 
-            c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))
-            s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))
+            c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))  # 将原型编码进行单位化。
+            s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))  # 将风格属性编码进行单位化。
 
             self.etc_type['combine_w'] = self.combine_weight.multp.item()
             c_a_id_norm *= min(self.combine_weight.multp, 1.0)
