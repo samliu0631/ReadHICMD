@@ -163,6 +163,12 @@ class Timer:
         print(self.msg % (time.time() - self.start_time))
 
 
+def  opt_addElement(opt):
+    opt.id_dis_gan_w = 1
+    opt.id_dis_id_adv_w = 1.000
+    return opt
+
+
 
 def opt_settings(opt):
 

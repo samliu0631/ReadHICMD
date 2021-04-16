@@ -35,7 +35,7 @@ np.random.seed(opt.random_seed) # Set the seed number of random algorithm
 torch.manual_seed(opt.random_seed)  # 设置 (CPU) 生成随机数的种子.  目的是为了每次实验产生的随机数是一样的，有利于实验结果的比对。
 torch.cuda.manual_seed_all(opt.random_seed)  # 为所有GPU设置随机数的种子。
 opt = opt_settings(opt)
-
+opt = opt_addElement(opt)   # added by sam.
 # 加载训练数据。
 # 这里已经产生了dataloaders了。
 dataloaders, dataloaders_train_tsne, old_train_dataloader, data_info, data_sample, opt = data_settings(opt)

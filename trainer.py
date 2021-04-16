@@ -20,6 +20,29 @@ from networks import Discriminator, ResidualEncoder,  ResidualDecoder, MLP
 from util_train import weights_init, get_model_list, vgg_preprocess, load_vgg16
 from random_erasing import RandomErasing
 
+from  addnetwork import  IdDis # add by sam.
+import yaml    # added by sam.
+
+def get_config(config):
+    # added by sam .
+    with open(config, 'r') as stream:
+        return yaml.load(stream)
+
+def get_scheduler(optimizer, hyperparameters, iterations=-1):
+    if 'lr_policy' not in hyperparameters or hyperparameters['lr_policy'] == 'constant':
+        scheduler = None # constant scheduler
+    elif hyperparameters['lr_policy'] == 'step':
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=hyperparameters['step_size'],
+                                        gamma=hyperparameters['gamma'], last_epoch=iterations)
+    elif hyperparameters['lr_policy'] == 'multistep':
+        #50000 -- 75000 --
+        step = hyperparameters['step_size']
+        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[step, step+step//2, step+step//2+step//4],
+                                        gamma=hyperparameters['gamma'], last_epoch=iterations)
+    else:
+        return NotImplementedError('learning rate policy [%s] is not implemented', hyperparameters['lr_policy'])
+    return scheduler
+
 class HICMD(nn.Module):
     # 所有的神经网络模型都要继承 nn.Module.
     def __init__(self, opt):
@@ -46,6 +69,22 @@ class HICMD(nn.Module):
         self.cnt_batch_D = 0
         self.cnt_batch_ID = 0
         opt.old_apply_pos_cnt = opt.apply_pos_cnt
+
+        # added by sam.
+        # Initialization of domain discriminator 域鉴别器。
+        hyperparameters = get_config('market2duke.yaml')
+        self.id_dis = IdDis(hyperparameters['gen']['id_dim'], hyperparameters['dis'], fp16=False)
+        # 需要调整一下输入的维度。
+        beta1 = hyperparameters['beta1']  # 0
+        beta2 = hyperparameters['beta2']  # 0.999
+        lr_id_d = hyperparameters['lr_id_d']
+        id_dis_params = list(self.id_dis.parameters())
+        self.id_dis_opt = torch.optim.Adam([p for p in id_dis_params if p.requires_grad],
+                                           lr=lr_id_d, betas=(beta1, beta2),
+                                           weight_decay=hyperparameters['weight_decay'])
+        self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters)
+        self.id_dis_scheduler.gamma = hyperparameters['gamma2']  # 0.1
+
 
         #******Discriminator 鉴别器参数设置。****************************************************************
         dis_params = []
@@ -302,6 +341,8 @@ class HICMD(nn.Module):
             torch.cuda.synchronize()  # 等待GPU返回结果．再继续．
 
     def dis_update(self, x_a, x_b, opt, phase):
+        # modified by sam*******************************************.
+        self.id_dis_opt.zero_grad()    # 将doamin鉴别器的优化器清零。
 
         # Update discriminator
         if self.case_a == 'RGB':
@@ -395,6 +436,18 @@ class HICMD(nn.Module):
             # 根据梯度，对鉴别器参数进行优化。
             self.zero_grad_D = True
 
+
+
+            # add by sam******************************************
+            # Calculate the domain discrimintor loss. c_a 圆形编码，  c_b 属性编码。
+            # self.loss_id_dis_ab, _, _ = self.id_dis.calc_dis_loss_ab(c_a.detach(), c_b.detach())
+            # self.loss_dis_total = opt.id_dis_gan_w * self.loss_dis_a + opt.id_dis_gan_w * self.loss_dis_b
+            # self.loss_id_dis_total = opt.id_dis_id_adv_w* self.loss_id_dis_ab
+            # self.loss_id_dis_total.backward()    # domain discriminator loss backward.
+            # self.id_dis_opt.step()   # optimize the domain discriminator.
+            # add by sam******************************************
+
+
             self.loss_type['D_a'] = opt.w_gan * self.loss_dis_a.item()  # scalar  
             self.loss_type['D_b'] = opt.w_gan * self.loss_dis_b.item()  # 存储损失函数
             self.loss_type['TOT_D'] = self.loss_dis_total.item()       # 存储总的损失函数
@@ -429,6 +482,9 @@ class HICMD(nn.Module):
 
 
     def gen_update(self, x_a, x_b, neg_a, neg_b, opt, phase):
+
+        # modified by sam
+        self.id_dis_opt.zero_grad()  # 将id_dis的优化器 梯度清零。
 
         # 这个函数是go_train中主要调用的函数。   这里的x_a，x_b都是两张图。
         if self.case_a == 'RGB':

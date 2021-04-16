@@ -2,7 +2,6 @@ from torch import nn
 from torch.autograd import Variable
 import torch
 import torch.nn.functional as F
-#from torchvision import models
 import torch.nn.init as init
 
 
