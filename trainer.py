@@ -1029,11 +1029,11 @@ class HICMD(nn.Module):
 
         self.eval()  #  变换到evaluation阶段。
 
-        modal_np = np.asarray(modal)  # modal 记录了
-        idx_v = np.where(modal_np == 1)
-        idx_t = np.where(modal_np == 0)
-        x_a = input[idx_v]    # 获取输入的RGB图像
-        x_b = input[idx_t]    # 获取输入的IR图像
+        modal_np = np.asarray(modal)     # 将modal 变为arrary变量。
+        idx_v = np.where(modal_np == 1)  # 1 表示RGB图像。
+        idx_t = np.where(modal_np == 0)  # 0 表示IR图像。
+        x_a = input[idx_v]               # 获取输入的RGB图像
+        x_b = input[idx_t]               # 获取输入的IR图像
 
         is_RGB = False
         is_IR = False
@@ -1109,14 +1109,14 @@ class HICMD(nn.Module):
         c_mat = []
         c_vec = []
 
-        c_id, c_mat = self.backbone_pro(c_id, multi_output = True)   # 进行原型编码的backbone。
+        c_id, c_mat = self.backbone_pro(c_id, multi_output = True)   # 进行原型编码的backbone。得到原型编码的向量形式。
         c_vec = c_id
 
         s_id_all = s_id
-        s_id_domain = torch_gather(s_id, self.att_illum_idx, 1)
+        s_id_domain = torch_gather(s_id, self.att_illum_idx, 1)  
         s_id_share = torch_gather(s_id, self.att_pose_idx, 1)
         s_id_remain = torch_gather(s_id, self.att_ex_idx, 1)
-        s_id = torch_gather(s_id, self.att_style_idx, 1)
+        s_id = torch_gather(s_id, self.att_style_idx, 1)  # 得到s_id，即风格属性编码.
 
         c_id_norm = c_id.div(torch.norm(c_id, p=2, dim=1, keepdim=True).expand_as(c_id))
         s_id_norm = s_id.div(torch.norm(s_id, p=2, dim=1, keepdim=True).expand_as(s_id))
@@ -1125,12 +1125,13 @@ class HICMD(nn.Module):
         s_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
 
         f0 = torch.Tensor().cuda()
-        f0 = torch.cat((f0, c_id_norm), dim=1)
+        f0 = torch.cat((f0, c_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
         f0 = torch.cat((f0, s_id_norm), dim=1)
 
         _, f1, f_triplet = self.id_classifier(f0)
 
         feature = []
+        # opt.evaluate_category 变量决定了最后的feature中存储那些变量。
         if 'content' in opt.evaluate_category:
             feature += [c_id]
         if 'style_id' in opt.evaluate_category:
