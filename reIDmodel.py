@@ -108,13 +108,13 @@ class ClassBlock(nn.Module):
         x = self.add_block(x) # [b, 512]
 
         if self.return_f:
-            f = x
+            f = x   # f 用于保存原始的x ，因此维度是64*2048
             if self.add_feature > 0:
-                f2 = self.add_block2(x)
+                f2 = self.add_block2(x)  # x : 64*2048
             else:
                 f2 = []
-            x = self.classifier(x) # [b, num_classes]
-            return x, f, f2
+            x = self.classifier(x) # [b, num_classes]   # x表示不同类型的可能性？
+            return x, f, f2  # x 64*206,  f:64*2048, f2:64*1024
         else:
             x = self.classifier(x)
             return x

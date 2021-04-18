@@ -545,14 +545,14 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
     features_RAM_all = []
 
     for cnt, data in enumerate(dataloaders):  # Iterate over data.
-        img, label = data
+        img, label = data  # 测试过程的一个batch 是64 张图像。
         b, c, h, w = img.size()
         if ((cnt + 1) % opt.cnt_test_print_loss == 0) or (cnt == len(dataloaders)-1):
             print('Extract {} feature..{}/{}'.format(type_name, (cnt + 1), len(dataloaders)))
 
         ff_all = []
         cnt_first = 0
-        input_img = Variable(img.cuda())
+        input_img = Variable(img.cuda())  # 将图像Batch送到cuda中，并转换为Variable变量。
         for i in range(2):
             if(i==1):
                 img = fliplr(img)
@@ -565,7 +565,7 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
                 if opt.test_RAM:
                     feature, feature_RAM = trainer.forward(opt, input_img, modals_set[cnt], cams_set[cnt])
                     # 使用forward函数提取特征。
-                else:
+                else:# test中执行的是下述代码。一次测试64张图像。
                     feature, _ = trainer.forward(opt, input_img, modals_set[cnt], cams_set[cnt])
 
                 if cnt_first == 1:

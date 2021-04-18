@@ -200,6 +200,7 @@ class HICMD(nn.Module):
 
         # set GPU
         if opt.use_gpu:
+            self.id_dis = self.id_dis.cuda()  # added by sam.
             self.id_classifier = self.id_classifier.cuda()   # 将模型移到cuda上。
             self.backbone_pro = self.backbone_pro.cuda()     
             self.combine_weight = self.combine_weight.cuda()
@@ -329,7 +330,9 @@ class HICMD(nn.Module):
             self.case_a = case_a1        # 'RGB'
             self.case_b = case_b1        # 'IR'
             self.dis_update(x_a1, x_b1, opt, phase)                 # x_a1  x_b1都是2张图片。
+            self.domain_dis_update(x_a1, x_b1, opt, phase)  # update the domain discriminator.
             self.gen_update(x_a1, x_b1, neg_a, neg_b, opt, phase)   # 对整个模型进行更新。
+
 
         # 存储损失函数结果。
         for key, value in self.loss_type.items():
@@ -341,9 +344,87 @@ class HICMD(nn.Module):
         if opt.flag_synchronize:
             torch.cuda.synchronize()  # 等待GPU返回结果．再继续．
 
-    def dis_update(self, x_a, x_b, opt, phase):
+    def domain_dis_update(self, x_a, x_b, opt, phase):
         # modified by sam*******************************************.
-        self.id_dis_opt.zero_grad()    # 将doamin鉴别器的优化器清零。 这一步是防止更新genarator参数的时候，再discriminator中留下梯度。
+        self.id_dis_opt.zero_grad()  # 将doamin鉴别器的优化器清零。 这一步是防止更新genarator参数的时候，再discriminator中留下梯度。
+        # 是否应该　把generator　and discriminator 梯度清零。最好这样。
+
+        # Set the generator.
+        if self.case_a == 'RGB':
+            self.gen_a = self.gen_RGB  # 对RGB的生成器进行赋值。
+        elif self.case_a == 'IR':
+            self.gen_a = self.gen_IR  # 对IR的鉴别器进行赋值。
+        else:
+            assert (False)
+
+        if self.case_b == 'RGB':
+            self.gen_b = self.gen_RGB
+        elif self.case_b == 'IR':
+            self.gen_b = self.gen_IR
+        else:
+            assert (False)
+
+
+        # Preprocess the  input images.
+        if opt.D_input_dim == 1:
+            Gx_a = self.single(x_a.clone())
+            Gx_b = self.single(x_b.clone())
+        else:
+            Gx_a = x_a.clone()
+            Gx_b = x_b.clone()
+
+        Gx_a_raw = Gx_a.clone()
+        Gx_b_raw = Gx_b.clone()
+
+
+        # Caluclate the protetype codes.
+        c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
+        c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
+
+        # Calculate the attribute codes.
+        s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a
+        s_b = self.gen_b.enc_att(Gx_b)  # 得到属性编码  s_b
+
+        # Project the protetype code to vector.
+        c_a_id, _ = self.backbone_pro(c_a, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
+        c_b_id, _ = self.backbone_pro(c_b, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
+
+        # Extract the style attribute codes.
+        s_a_id = torch_gather(s_a, self.att_style_idx, 1)  # 从2048维度的向量中提取1024维度的 风格 属性编码.
+        s_b_id = torch_gather(s_b, self.att_style_idx, 1)  # 从2048维度的向量中提取1024维度的 风格 属性编码.
+
+        # Nomilize the protetype and style attribute code.
+        c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))  # 将原型编码进行单位化。
+        s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))  # 将风格属性编码进行单位化。
+        c_b_id_norm = c_b_id.div(torch.norm(c_b_id, p=2, dim=1, keepdim=True).expand_as(c_b_id))  # 将原型编码进行单位化。
+        s_b_id_norm = s_b_id.div(torch.norm(s_b_id, p=2, dim=1, keepdim=True).expand_as(s_b_id))  # 将风格属性编码进行单位化。
+
+        # Combine the style attribute codes and the protetype codes.
+        c_a_id_norm *= min(self.combine_weight.multp, 1.0)
+        s_a_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
+        f0_a = torch.Tensor().cuda()
+        f0_a = torch.cat((f0_a, c_a_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+        f0_a = torch.cat((f0_a, s_a_id_norm), dim=1)
+        _, f1_a, _ = self.id_classifier(f0_a)
+
+        c_b_id_norm *= min(self.combine_weight.multp, 1.0)
+        s_b_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
+        f0_b = torch.Tensor().cuda()
+        f0_b = torch.cat((f0_b, c_b_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+        f0_b = torch.cat((f0_b, s_b_id_norm), dim=1)
+        _, f1_b, _ = self.id_classifier(f0_b)
+
+        #Calculate the domain discrimintor loss.
+        self.loss_id_dis_ab, _, _ = self.id_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
+        self.loss_dis_total = opt.id_dis_gan_w * self.loss_dis_a + opt.id_dis_gan_w * self.loss_dis_b
+        self.loss_id_dis_total = opt.id_dis_id_adv_w* self.loss_id_dis_ab
+        self.loss_id_dis_total.backward()    # domain discriminator loss backward.
+        self.id_dis_opt.step()   # optimize the domain discriminator.
+
+
+
+    def dis_update(self, x_a, x_b, opt, phase):
+
 
         # Update discriminator
         if self.case_a == 'RGB':
@@ -438,17 +519,6 @@ class HICMD(nn.Module):
             self.zero_grad_D = True
 
 
-
-            # add by sam******************************************
-            # Calculate the domain discrimintor loss. c_a 圆形编码，  c_b 属性编码。
-            # self.loss_id_dis_ab, _, _ = self.id_dis.calc_dis_loss_ab(c_a.detach(), c_b.detach())
-            # self.loss_dis_total = opt.id_dis_gan_w * self.loss_dis_a + opt.id_dis_gan_w * self.loss_dis_b
-            # self.loss_id_dis_total = opt.id_dis_id_adv_w* self.loss_id_dis_ab
-            # self.loss_id_dis_total.backward()    # domain discriminator loss backward.
-            # self.id_dis_opt.step()   # optimize the domain discriminator.
-            # add by sam******************************************
-
-
             self.loss_type['D_a'] = opt.w_gan * self.loss_dis_a.item()  # scalar  
             self.loss_type['D_b'] = opt.w_gan * self.loss_dis_b.item()  # 存储损失函数
             self.loss_type['TOT_D'] = self.loss_dis_total.item()       # 存储总的损失函数
@@ -540,7 +610,7 @@ class HICMD(nn.Module):
             Gx_b_raw = Gx_b.clone()    # 对输入图像进行复制。
 
             if self.zero_grad_G:
-                self.gen_optimizer.zero_grad()
+                self.gen_optimizer.zero_grad()  # 把生成器中优化参数的梯度置零。
                 self.zero_grad_G = False
 
             c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码 生成原型编码c_a。  2 * 256 * 64 * 32
@@ -1026,8 +1096,8 @@ class HICMD(nn.Module):
     def forward(self, opt, input, modal, cam):
     # The subclass of nn.Module must has the implementation of forward.
     # 这个函数定义了HICMD模型的前馈过程。
-
-        self.eval()  #  变换到evaluation阶段。
+        # modal  cam 都是64维度的向量。  input是64张图像。
+        self.eval()  # id_classifier变换到evaluation阶段。在训练过程中，作者并没有使用HIcmd模型的forward函数。
 
         modal_np = np.asarray(modal)     # 将modal 变为arrary变量。
         idx_v = np.where(modal_np == 1)  # 1 表示RGB图像。
@@ -1128,7 +1198,7 @@ class HICMD(nn.Module):
         f0 = torch.cat((f0, c_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
         f0 = torch.cat((f0, s_id_norm), dim=1)
 
-        _, f1, f_triplet = self.id_classifier(f0)
+        _, f1, f_triplet = self.id_classifier(f0)  # 这个是什么?
 
         feature = []
         # opt.evaluate_category 变量决定了最后的feature中存储那些变量。
@@ -1146,7 +1216,7 @@ class HICMD(nn.Module):
             feature += [s_id_all]
         if 'f0' in opt.evaluate_category:
             feature += [f0]
-        if 'f1' in opt.evaluate_category:
+        if 'f1' in opt.evaluate_category:  # 在测试的时候，feature变量中只保留f1，而没有其他任何变量。
             feature += [f1]
         if 'f_triplet' in opt.evaluate_category:
             feature += [f_triplet]
@@ -1159,8 +1229,8 @@ class HICMD(nn.Module):
             feature_RAM += [s_mat]
             feature_RAM += [s_vec]
 
-        self.train()
-        return feature, feature_RAM
+        self.train()  # 切换为训练模式。
+        return feature, feature_RAM  # 训练模式中 feature_RAM变量为空。
 
 
     def recon_criterion(self, input, target):
