@@ -343,7 +343,7 @@ class HICMD(nn.Module):
 
     def dis_update(self, x_a, x_b, opt, phase):
         # modified by sam*******************************************.
-        self.id_dis_opt.zero_grad()    # 将doamin鉴别器的优化器清零。
+        self.id_dis_opt.zero_grad()    # 将doamin鉴别器的优化器清零。 这一步是防止更新genarator参数的时候，再discriminator中留下梯度。
 
         # Update discriminator
         if self.case_a == 'RGB':
