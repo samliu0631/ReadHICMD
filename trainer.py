@@ -956,7 +956,8 @@ class HICMD(nn.Module):
             f_all = torch.cat((f_all, c_all), dim=1)
             f_all = torch.cat((f_all, s_all), dim=1)
 
-            output_all, _, f_all_triplet = self.id_classifier(f_all)
+            #output_all, _, f_all_triplet = self.id_classifier(f_all)
+            output_all, output_f_all, f_all_triplet = self.id_classifier(f_all)
 
             pivot_idx_ce = find_array(idx_all, pivot_idx_ce)
             pivot_idx_trip1 = find_array(idx_all, pivot_idx_trip1)
@@ -1008,7 +1009,13 @@ class HICMD(nn.Module):
             self.etc_type['Trip_nscore'] = nscore_all / loss_cnt
             self.loss_type['TRIP'] = self.loss_trip.item() if self.loss_trip != 0 else 0
 
-            self.loss_id_total = self.loss_CE + self.loss_trip
+            # Added by sam.
+            # ID domain adversarial loss
+            self.loss_gen_id_adv = self.id_dis.calc_gen_loss(output_f_all)
+
+            #self.loss_id_total = self.loss_CE + self.loss_trip
+            # Change the total loss by adding the ID domain adversarial loss.  Added by sam.
+            self.loss_id_total = self.loss_CE + self.loss_trip+ self.loss_gen_id_adv
 
             if opt.HFL_ratio > 0:
                 self.loss_id_total *= opt.HFL_ratio
