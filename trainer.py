@@ -422,6 +422,25 @@ class HICMD(nn.Module):
         self.id_dis_opt.step()   # optimize the domain discriminator.
 
 
+        # Set back.
+        if self.case_a == 'RGB':
+            self.dis_RGB = self.dis_a
+            self.gen_RGB = self.gen_a
+        elif self.case_a == 'IR':
+            self.dis_IR = self.dis_a
+            self.gen_IR = self.gen_a
+        else:
+            assert(False)
+
+        if self.case_b == 'RGB':
+            self.dis_RGB = self.dis_b
+            self.gen_RGB = self.gen_b
+        elif self.case_b == 'IR':
+            self.dis_IR = self.dis_b
+            self.gen_IR = self.gen_b
+        else:
+            assert(False)
+
 
     def dis_update(self, x_a, x_b, opt, phase):
 
@@ -756,7 +775,7 @@ class HICMD(nn.Module):
             x_a_re_id = self.to_re(Gx_a_raw.clone())  # 将输入图像进行随机的擦除部分区域。
             x_b_re_id = self.to_re(Gx_b_raw.clone())  #
             x_a_re_id = x_a_re_id.detach()  # 从梯度计算中剥离。
-            x_b_re_id = x_b_re_id.detach()
+            x_b_re_id = x_b_re_id.detach()  # 从梯度计算中剥离。
 
             c_a_id = self.gen_a.enc_pro(x_a_re_id)  # 计算原型编码。
             c_b_id = self.gen_b.enc_pro(x_b_re_id)  # 计算原型编码，得到c_b_id
@@ -765,14 +784,15 @@ class HICMD(nn.Module):
 
             x_ab_re_id = self.to_re(x_ab_raw.clone())   # 将Xab进行随机擦除,得到图像x_ab_re_id。
             x_ba_re_id = self.to_re(x_ba_raw.clone())
-            x_ab_re_id = x_ab_re_id.detach()
-            x_ba_re_id = x_ba_re_id.detach()
+            x_ab_re_id = x_ab_re_id.detach()  # 从梯度计算中剥离。
+            x_ba_re_id = x_ba_re_id.detach()  # 从梯度计算中剥离。
 
             c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算图像x_ab_re_id的原型编码
             c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)   # 计算。。
             s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)  # 计算x_ba_re_id属性编码
             s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)  # 计算属性编码。
 
+            # ******************************
             c_a_id = self.backbone_pro(c_a_id)  
             # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。   这就是H矩阵。 之所以是2*1024. 因为一个patch 有2个同模态的图像。
             s_a_id_raw = s_a_id.clone()         # 复制图像x_a_re_id的属性编码s_a_id。
@@ -785,6 +805,7 @@ class HICMD(nn.Module):
             c_a_id_norm *= min(self.combine_weight.multp, 1.0)
             s_a_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
 
+            # ******************************
             c_b_id = self.backbone_pro(c_b_id)
             s_b_id = torch_gather(s_b_id, self.att_style_idx, 1)
 
@@ -794,6 +815,7 @@ class HICMD(nn.Module):
             c_b_id_norm *= min(self.combine_weight.multp, 1.0)
             s_b_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
 
+            # ******************************
             c_a_recon_id = self.backbone_pro(c_a_recon_id)
             s_a_recon_id = torch_gather(s_a_recon_id, self.att_style_idx, 1)
 
@@ -803,6 +825,8 @@ class HICMD(nn.Module):
             c_a_recon_id_norm *= min(self.combine_weight.multp, 1.0)
             s_a_recon_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
 
+
+            #******************************
             c_b_recon_id = self.backbone_pro(c_b_recon_id)
             s_b_recon_id = torch_gather(s_b_recon_id, self.att_style_idx, 1)
 
@@ -825,8 +849,8 @@ class HICMD(nn.Module):
                 y_a_re_id = self.to_re(Gy_a.clone())
                 y_b_re_id = self.to_re(Gy_b.clone())
 
-                y_a_re_id = y_a_re_id.detach()
-                y_b_re_id = y_b_re_id.detach()
+                y_a_re_id = y_a_re_id.detach()  # 从梯度计算中剥离。
+                y_b_re_id = y_b_re_id.detach()  # 从梯度计算中剥离。
 
                 c_a_neg_id = self.gen_a.enc_pro(y_a_re_id)
                 c_b_neg_id = self.gen_b.enc_pro(y_b_re_id)
@@ -960,19 +984,25 @@ class HICMD(nn.Module):
             output_all, output_f_all, f_all_triplet = self.id_classifier(f_all)
 
             pivot_idx_ce = find_array(idx_all, pivot_idx_ce)
+
             pivot_idx_trip1 = find_array(idx_all, pivot_idx_trip1)
             target_idx_trip1 = find_array(idx_all, target_idx_trip1)
+
             pivot_idx_trip2 = find_array(idx_all, pivot_idx_trip2)
             target_idx_trip2 = find_array(idx_all, target_idx_trip2)
 
             output_all_ce = output_all[pivot_idx_ce].clone()
             label_all_ce = label_all[pivot_idx_ce].clone()
+
             f_all_triplet1 = f_all_triplet[pivot_idx_trip1].clone()
             label_triplet1 = label_all[pivot_idx_trip1].clone()
+
             f_all_triplet1_target = f_all_triplet[target_idx_trip1].clone()
             label_triplet1_target = label_all[target_idx_trip1].clone()
+
             f_all_triplet2 = f_all_triplet[pivot_idx_trip2].clone()
             label_triplet2 = label_all[pivot_idx_trip2].clone()
+
             f_all_triplet2_target = f_all_triplet[target_idx_trip2].clone()
             label_triplet2_target = label_all[target_idx_trip2].clone()
 

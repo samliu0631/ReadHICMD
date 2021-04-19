@@ -51,7 +51,7 @@ gen:
   dec: basic                     # [basic/parallel/series]
   dim: 16                        # number of filters in the bottommost layer
   dropout: 0                     # use dropout in the generator
-  id_dim: 2048                   # length of appearance code
+  id_dim: 2048                   # length of id-related code(combination of protetype code and style attribute code)
   mlp_dim: 512                   # number of filters in MLP
   mlp_norm: none                 # norm in mlp [none/bn/in/ln]
   n_downsample: 2                # number of downsampling layers in content encoder
