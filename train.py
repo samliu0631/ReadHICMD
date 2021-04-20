@@ -115,6 +115,9 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
                 if phase in opt.phase_train:                      # 判断是否位于训练阶段
                     if epoch_cnt % opt.cnt_save_modal == 0:       # 如果累计训练达到5000次，进行一次存储。
                         trainer.save(opt, epoch)
+                    #if epoch_cnt % 1000 == 0:
+                        #torch.save(trainer.state_dict(), './pretrained/new/RegDB_01.pkl')
+                        torch.save(trainer.state_dict(), './pretrained/new/SYSU.pkl')
 
                 # Drawing plot and saving phase
                 if (not opt.test_only) and (phase in opt.phase_train):

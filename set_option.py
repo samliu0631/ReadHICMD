@@ -22,7 +22,7 @@ def opt_model(opt):
         opt.cnt_draw_samples = 1000
         opt.cnt_print_loss = 10
         opt.cnt_test_print_loss = 10
-        opt.test_cnt = 5000
+        opt.test_cnt = 5000 #4120 #5000
         opt.cnt_save_modal = opt.test_cnt
     else:
         opt.num_cnt = 1000
@@ -31,7 +31,7 @@ def opt_model(opt):
         opt.cnt_print_loss = 1
         opt.cnt_test_print_loss = 10
         opt.test_cnt = 500
-        opt.cnt_save_modal = 5000
+        opt.cnt_save_modal = 5000 #4120 #5000
 
     # ===== Data parameters =====
     opt.h = 256

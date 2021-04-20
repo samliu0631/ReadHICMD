@@ -3,6 +3,6 @@ model/
 pretrained/
 log/
 eval_SYSU/
-__pycache__
+__pycache__/
 .idea/
 .vscode/
