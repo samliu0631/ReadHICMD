@@ -3,4 +3,4 @@
 
 --data_name RegDB_01 --name_output train --flag_exp 1
 
---data_name SYSU-MM01 --name_output train_1 --flag_exp 1
+--data_name SYSU --name_output train_1 --flag_exp 1
