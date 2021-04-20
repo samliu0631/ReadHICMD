@@ -69,15 +69,15 @@ class IdDis(nn.Module):
 
     def calc_dis_loss_ab(self, input_s, input_t):
         # input_s: RGB, input_t:IR.
-        outs0 = self.forward(input_s)  # RGB
-        outs1 = self.forward(input_t)  # IR
+        outs0 = self.forward(input_s)  # RGB  认为是真实编码，记为0.
+        outs1 = self.forward(input_t)  # IR   认为是虚假编码，记为1.
         loss = 0
 
         reg = 0.0
         for it, (out0, out1) in enumerate(zip(outs0, outs1)): # 因为1个batch有多张图像，所以要逐个计算。
             if self.gan_type == 'lsgan':
-                #loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2) # 0 indicates source and 1 indicates target
-                loss += torch.mean((out0 - 1)**2) + torch.mean((out1 - 0) ** 2)  # 0 indicates source and 1 indicates target
+                loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2) # 0 indicates source and 1 indicates target
+                #loss += torch.mean((out0 - 1)**2) + torch.mean((out1 - 0) ** 2)  # 0 indicates source and 1 indicates target
             elif self.gan_type == 'nsgan':
                 all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
                 all1 = Variable(torch.ones_like(out1.data).cuda(), requires_grad=False)
@@ -97,7 +97,7 @@ class IdDis(nn.Module):
 
         for it, (out0) in enumerate(outs0):
             if self.gan_type == 'lsgan':
-                loss += torch.mean((out0)**2) * 2  # LSGAN
+                loss += torch.mean((out0)**2) * 2  # LSGAN   这里应该是把target的编码进行处理。
             elif self.gan_type == 'nsgan':
                 all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
                 loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all0))

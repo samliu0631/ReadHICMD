@@ -890,22 +890,22 @@ class HICMD(nn.Module):
             samp_idx.extend(pivot_idx_trip2.copy())
             samp_idx.extend(target_idx_trip1.copy())
             samp_idx.extend(target_idx_trip2.copy())
-            samp_idx = list(set(samp_idx))
+            samp_idx = list(set(samp_idx))  # 1 2 3 4 5 6 7 8。
 
 
             if 1 in samp_idx: # pure a [a]
                 c_all = torch.cat((c_all, c_a_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_a_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_a), dim=0)
-                idx_all.extend([1]*len(self.labels_a))
+                idx_all.extend([1]*len(self.labels_a))  # 存储编号1.
 
-            if 2 in samp_idx: # pure b [b]
+            if 2 in samp_idx: # pure b [b]  target
                 c_all = torch.cat((c_all, c_b_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_b_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_b), dim=0)
-                idx_all.extend([2]*len(self.labels_b))
+                idx_all.extend([2]*len(self.labels_b))   # 存储编号2.
 
-            if 3 in samp_idx: # x_ba (c_b_recon, s_a_recon) [b] a'
+            if 3 in samp_idx: # x_ba (c_b_recon, s_a_recon) [b] a'     
                 c_all = torch.cat((c_all, c_b_recon_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_a_recon_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_b), dim=0)
@@ -1042,6 +1042,8 @@ class HICMD(nn.Module):
             # Added by sam.
             # ID domain adversarial loss
             self.loss_gen_id_adv = self.id_dis.calc_gen_loss(output_f_all)
+            # 这部分损失函数应该只是对目标域（IR域）应用。这个应该只是针对2类型来的。
+
 
             #self.loss_id_total = self.loss_CE + self.loss_trip
             # Change the total loss by adding the ID domain adversarial loss.  Added by sam.
