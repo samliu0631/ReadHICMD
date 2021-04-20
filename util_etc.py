@@ -195,7 +195,7 @@ def opt_settings(opt):
 
     #---------------------------------------# Train setting
     if opt.phase_train in opt.phase_exp:
-        opt.save_dir = os.path.join('./model', opt.data_name, opt.name_output)
+        opt.save_dir = os.path.join('./model', opt.data_name, opt.name_output)  #这里的保存目录，是根据数据名称来的。
         cnt = 0
         while os.path.isfile(opt.save_dir + '/train.py'):
             cnt += 1

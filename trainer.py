@@ -163,6 +163,7 @@ class HICMD(nn.Module):
         self.backbone_pro = ft_resnet2(input_dim = input_dim, depth = opt.backbone_pro_resnet_depth, stride = opt.stride,\
                                                max_num_conv = opt.backbone_pro_max_num_conv, max_ouput_dim = opt.backbone_pro_max_ouput_dim, \
                                                pretrained = opt.backbone_pro_pretrained, partpool = opt.backbone_pro_partpool, pooltype = opt.backbone_pro_typepool)
+        
         # backbone_pro对应的也是一个网络。
         id_dim += self.backbone_pro.output_dim
         id_dim += self.att_style_dim
@@ -172,6 +173,7 @@ class HICMD(nn.Module):
 
         # additional fc_layers (for CE, TRIP)
         self.combine_weight = ft_weight()
+        # 这个opt.fc2_channel值是多少？
         self.id_classifier = ft_classifier(input_dim = id_dim, class_num = opt.nclasses, droprate = opt.droprate, fc1 = opt.fc1_channel, fc2 = opt.fc2_channel, \
                                          bnorm = opt.bnorm, ID_norm = opt.ID_norm, ID_act = opt.ID_act, w_lrelu = opt.w_lrelu, return_f = True)
         all_params = [{'params': list(self.id_classifier.parameters()), 'lr': opt.lr_backbone}]
@@ -416,7 +418,6 @@ class HICMD(nn.Module):
 
         #Calculate the domain discrimintor loss.
         self.loss_id_dis_ab, _, _ = self.id_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
-        self.loss_dis_total = opt.id_dis_gan_w * self.loss_dis_a + opt.id_dis_gan_w * self.loss_dis_b
         self.loss_id_dis_total = opt.id_dis_id_adv_w* self.loss_id_dis_ab
         self.loss_id_dis_total.backward()    # domain discriminator loss backward.
         self.id_dis_opt.step()   # optimize the domain discriminator.
@@ -608,7 +609,7 @@ class HICMD(nn.Module):
                 Do_id_update = True
             else:
                 Do_gen_update = True   # 实际执行这部分。
-                Do_id_update = True
+                Do_id_update = True   # 这两个都是True
         else:
             Do_gen_update = True   # 第一次执行执行这部分。
             Do_id_update = True
@@ -981,7 +982,15 @@ class HICMD(nn.Module):
             f_all = torch.cat((f_all, s_all), dim=1)
 
             #output_all, _, f_all_triplet = self.id_classifier(f_all)
-            output_all, output_f_all, f_all_triplet = self.id_classifier(f_all)
+            ####################
+            output_all, output_f_all, f_all_triplet = self.id_classifier(f_all)   # modified by sam .
+            domain_adv_id_list = [2,3,4]       
+            domain_adv_indexs = find_array(idx_all, domain_adv_id_list)
+            f_all_domain_adv = output_f_all[domain_adv_indexs].clone()
+
+
+
+            #####################
 
             pivot_idx_ce = find_array(idx_all, pivot_idx_ce)
 
@@ -1041,9 +1050,10 @@ class HICMD(nn.Module):
 
             # Added by sam.
             # ID domain adversarial loss
-            self.loss_gen_id_adv = self.id_dis.calc_gen_loss(output_f_all)
-            # 这部分损失函数应该只是对目标域（IR域）应用。这个应该只是针对2类型来的。
-
+            self.loss_gen_id_adv = self.id_dis.calc_gen_loss(f_all_domain_adv)
+            # 对目标域（IR域）,和包含IR域产生的原型编码 或 风格属性编码的 特征编码 计算域鉴别对抗损失函数。
+            # 这个损失函数定义的目标是，使得生成器生成的 最终特征编码 接近 RGB域的特征编码，无论是IR域产生的特征编码，还是包含IR域的混合特征编码。
+            # 而域鉴别器的目标就是 把RGB的特征编码，和其他类别的鉴别出来。
 
             #self.loss_id_total = self.loss_CE + self.loss_trip
             # Change the total loss by adding the ID domain adversarial loss.  Added by sam.
@@ -1079,6 +1089,7 @@ class HICMD(nn.Module):
         # 这一步骤主要是对ID-PIG和HFL中的参数进行更新。
 
         if Do_gen_update and Do_id_update:
+            # 实际执行的是这部分，也就是原型编码器
             self.loss_total = self.loss_gen_total + self.loss_id_total
             self.loss_total.backward()
             self.gen_optimizer.step()
@@ -1237,7 +1248,7 @@ class HICMD(nn.Module):
         f0 = torch.cat((f0, c_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
         f0 = torch.cat((f0, s_id_norm), dim=1)
 
-        _, f1, f_triplet = self.id_classifier(f0)  # 这个是什么?
+        _, f1, f_triplet = self.id_classifier(f0)  # 这个是在 原型编码和风格属性编码组合之后进行的全连接变换。 
 
         feature = []
         # opt.evaluate_category 变量决定了最后的feature中存储那些变量。

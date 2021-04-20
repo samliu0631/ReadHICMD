@@ -98,7 +98,7 @@ class ClassBlock(nn.Module):
         # linear, BN, dropout, classifier
 
         classifier = []
-        classifier += [nn.Linear(num_bottleneck, class_num)]
+        classifier += [nn.Linear(num_bottleneck, class_num)]  # 这个是为了把特征映射到图像类别中，每个类别对应一个概率。所以交分类器。
         classifier = nn.Sequential(*classifier)
         classifier.apply(weights_init_classifier)
 
