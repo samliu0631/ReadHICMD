@@ -6,9 +6,9 @@ from shutil import copyfile
 import cv2
 from PIL import Image
 parser = argparse.ArgumentParser(description='Prepare')
-# parser.add_argument('--load_dir',default='../../DB/reid/Market-1501-v15.09.15/',type=str, help='load dir path')
-# parser.add_argument('--save_dir',default='../../DB/baseline_DB/Market_tmp/',type=str, help='save dir path')
-parser.add_argument('--dataset_flag',default=8,type=int, help='flag for preparing dataset (0:Market1501 / 5:RegDB / 6:SYSU)')
+parser.add_argument('--load_dir',default='./data/SYSU/',type=str, help='load dir path')
+parser.add_argument('--save_dir',default='./data/SYSU/',type=str, help='save dir path')
+parser.add_argument('--dataset_flag',default=6,type=int, help='flag for preparing dataset (0:Market1501 / 5:RegDB / 6:SYSU)')
 opt = parser.parse_args()
 
 import numpy as np
@@ -293,8 +293,8 @@ elif opt.dataset_flag == 5:
 
 elif opt.dataset_flag == 6:
     name_data = 'SYSU'
-    opt.load_dir = '../../DB/crossreid/SYSU/SYSU-MM01/'
-    opt.save_dir = '../../DB/baseline_DB/SYSU/'
+    opt.load_dir = './data/SYSU/'
+    opt.save_dir = './data/SYSU/'
     check_file()
     copy_file_SYSU('(1/6)', [3, 6], 'Thermal', 'query', 'test')
     copy_file_SYSU('(2/6)', [1, 2, 4, 5], 'Visible', 'gallery', 'test')

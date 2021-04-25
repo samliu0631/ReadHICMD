@@ -97,6 +97,7 @@ class HICMD(nn.Module):
         gen_params = []
         self.gen_RGB = nn.Module()  # RGB图像产生器。　这里的gen_RGB就是一个相对独立的神经网络。
         self.gen_IR = nn.Module()   # IR图像产生器。　　gen_IR也是一个独立的神经网络。
+        self.gen_share = nn.Module()  # 共享的图像产生器。　　gen_share也是一个独立的神经网络。   add by ty
         self.gen_RGB.enc_att = ft_resnet(depth = opt.G_style_resnet_depth, pretrained = opt.G_style_pretrained, stride = opt.stride, partpool = opt.G_style_partpool, pooltype = opt.G_style_typepool, input_channel = opt.G_input_dim)
         # 这里是RGB图像的属性编码器Ea1。注意这里使用了resnet。
         gen_params += list(self.gen_RGB.enc_att.parameters())    # gen_params记录所有　属性编码器　和　原型编码器　参数。        
@@ -112,6 +113,12 @@ class HICMD(nn.Module):
         gen_params += list(self.gen_RGB.enc_pro.parameters())
         self.gen_IR.enc_pro = copy.deepcopy(self.gen_RGB.enc_pro)  #初始化IR图像的原型编码器。
         gen_params += list(self.gen_IR.enc_pro.parameters())
+
+        self.gen_share.enc_pro = ResidualEncoder(n_downsample = opt.G_n_downsamp, n_res = opt.G_n_residual, input_dim = opt.G_input_dim, \
+                                                bottleneck_dim = bottleneck_dim, norm = opt.G_enc_res_norm, activ = opt.G_act, pad_type = opt.G_pad_type, \
+                                                tanh = opt.G_tanh, res_type = opt.G_res_type, enc_type = opt.G_enc_type, flag_ASPP = opt.G_ASPP, \
+                                                init = opt.G_init, w_lrelu = opt.G_w_lrelu)  # 初始化共享图像的原型编码器
+        gen_params += list(self.gen_share.enc_pro.parameters())
 
         # ********************** Decoder *********************************************************
         #  因为红外可见光被光照属性编码进行了描述，所以这里的解码器只有一个，IR和RGB都是用的相同的解码器。
@@ -159,7 +166,8 @@ class HICMD(nn.Module):
 
         #***** prototype backbone **************************************************************************************
         id_dim = 0
-        input_dim = self.gen_RGB.enc_pro.output_dim   # 输入维度为  原型编码器的 输出维度。 256
+        #input_dim = self.gen_RGB.enc_pro.output_dim   # 输入维度为  原型编码器的 输出维度。 256
+        input_dim = self.gen_share.enc_pro.output_dim  # 输入维度为  原型编码器的 输出维度。 256
         self.backbone_pro = ft_resnet2(input_dim = input_dim, depth = opt.backbone_pro_resnet_depth, stride = opt.stride,\
                                                max_num_conv = opt.backbone_pro_max_num_conv, max_ouput_dim = opt.backbone_pro_max_ouput_dim, \
                                                pretrained = opt.backbone_pro_pretrained, partpool = opt.backbone_pro_partpool, pooltype = opt.backbone_pro_typepool)
@@ -208,6 +216,7 @@ class HICMD(nn.Module):
             self.combine_weight = self.combine_weight.cuda()
             self.gen_RGB = self.gen_RGB.cuda()
             self.gen_IR = self.gen_IR.cuda()
+            self.gen_share = self.gen_IR.cuda()  # add by ty
             self.dis_RGB = self.dis_RGB.cuda()
             self.dis_IR = self.dis_IR.cuda()
             print('===> [Start training]' + '-' * 30)
@@ -325,10 +334,10 @@ class HICMD(nn.Module):
         if (opt.cnt_initialize_pos < self.cnt_cumul):
             self.labels_a = labels_a1    # 对label 进行赋值  two labels of two RGB images.
             self.labels_b = labels_b1    # two lables of IR images.
-            self.modals_a = modals_a1    # 对modal进行赋值 两个RGB模态。
-            self.modals_b = modals_b1    # 两个IR模态。
-            self.cams_a = cams_a1        # 对cam进行赋值
-            self.cams_b = cams_b1
+            self.modals_a = modals_a1    # 对modal进行赋值 两个RGB模态。 1
+            self.modals_b = modals_b1    # 两个IR模态。 0
+            self.cams_a = cams_a1        # 对cam进行赋值 1
+            self.cams_b = cams_b1        #  0
             self.case_a = case_a1        # 'RGB'
             self.case_b = case_b1        # 'IR'
             self.dis_update(x_a1, x_b1, opt, phase)                 # x_a1  x_b1都是2张图片。
@@ -366,6 +375,7 @@ class HICMD(nn.Module):
         else:
             assert (False)
 
+        self.gen_s = self.gen_share
 
         # Preprocess the  input images.
         if opt.D_input_dim == 1:
@@ -380,8 +390,10 @@ class HICMD(nn.Module):
 
 
         # Caluclate the protetype codes.
-        c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
-        c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
+        #c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
+        #c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
+        c_a = self.gen_s.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
+        c_b = self.gen_s.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
 
         # Calculate the attribute codes.
         s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a
@@ -426,21 +438,27 @@ class HICMD(nn.Module):
         # Set back.
         if self.case_a == 'RGB':
             self.dis_RGB = self.dis_a
+            self.gen_a.enc_pro = self.gen_s.enc_pro
             self.gen_RGB = self.gen_a
         elif self.case_a == 'IR':
             self.dis_IR = self.dis_a
+            self.gen_a.enc_pro = self.gen_s.enc_pro
             self.gen_IR = self.gen_a
         else:
             assert(False)
 
         if self.case_b == 'RGB':
             self.dis_RGB = self.dis_b
+            self.gen_b.enc_pro = self.gen_s.enc_pro
             self.gen_RGB = self.gen_b
         elif self.case_b == 'IR':
             self.dis_IR = self.dis_b
+            self.gen_b.enc_pro = self.gen_s.enc_pro
             self.gen_IR = self.gen_b
         else:
             assert(False)
+
+        self.gen_share = self.gen_s
 
 
     def dis_update(self, x_a, x_b, opt, phase):
@@ -464,6 +482,9 @@ class HICMD(nn.Module):
             self.gen_b = self.gen_IR
         else:
             assert(False)
+
+        #共享鉴别器
+        self.gen_s = self.gen_share
 
         if self.cnt_cumul > 1:
             # 对于第2次batch开始。
@@ -494,8 +515,10 @@ class HICMD(nn.Module):
                 Gx_a_raw = Gx_a.clone()
                 Gx_b_raw = Gx_b.clone()
 
-                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
-                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
+                #c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
+                #c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
+                c_a = self.gen_s.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
+                c_b = self.gen_s.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
 
                 s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a
                 s_b = self.gen_b.enc_att(Gx_b)  # 得到属性编码  s_b
@@ -505,8 +528,10 @@ class HICMD(nn.Module):
                 s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)  # 对属性编码中的ID无关编码进行交换。 得到交换后的属性编码。
                 # 注意！！！交换属性编码后，s_a,s_b 对应的编码位置进行了互换！！！
                 # 含义是，在后续图像生成中，交换了姿势和光照编码
-                x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)   # 根据原型编码 c_b  和 属性编码  s_a   生成x_ba。 
-                x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)   # 根据原型编码 c_a  和 属性编码  s_b   生成x_ab。
+                #x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)   # 根据原型编码 c_b  和 属性编码  s_a   生成x_ba。
+                #x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)   # 根据原型编码 c_a  和 属性编码  s_b   生成x_ab。
+                x_ba = self.gen_a.dec(c_b, s_a, self.gen_s.enc_pro.output_dim)  # 根据原型编码 c_b  和 属性编码  s_a   生成x_ba。
+                x_ab = self.gen_b.dec(c_a, s_b, self.gen_s.enc_pro.output_dim)  # 根据原型编码 c_a  和 属性编码  s_b   生成x_ab。
 
             # 计算损失函数。
             #x_ba.detach() 表示从当前计算图中分离下来的，但是仍指向原变量的存放位置,不同之处只是requires_grad为false，得到的这个Variable永远不需要计算其梯度，不具有grad。
@@ -523,8 +548,10 @@ class HICMD(nn.Module):
             tmp.extend(self.att_pose_idx)
             s_a3_add, s_b3_add = change_two_index(s_a3_add, s_b3_add, tmp, self.att_illum_idx) # modality remain
             # 这里的含义是，生成图像的时候，改变了姿势，但是光照不改变。即是说生成了同一个域的图像。
-            x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim) # (ID, pose) b, (modality) a
-            x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim) # (ID, pose) a, (modality) b
+            #x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim) # (ID, pose) b, (modality) a
+            #x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim) # (ID, pose) a, (modality) b
+            x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_s.enc_pro.output_dim)  # (ID, pose) b, (modality) a
+            x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_s.enc_pro.output_dim)  # (ID, pose) a, (modality) b
 
             self.loss_dis_a3 = self.dis_a.calc_dis_loss(x_ba3.detach(), Gx_a_raw)   # 计算鉴别器的损失。
             self.loss_dis_b3 = self.dis_b.calc_dis_loss(x_ab3.detach(), Gx_b_raw)
@@ -555,21 +582,27 @@ class HICMD(nn.Module):
 
         if self.case_a == 'RGB':
             self.dis_RGB = self.dis_a  # 将优化更新后的鉴别器传回 原来的HICMD对象中。
+            self.gen_a.enc_pro = self.gen_s.enc_pro
             self.gen_RGB = self.gen_a
         elif self.case_a == 'IR':
             self.dis_IR = self.dis_a
+            self.gen_a.enc_pro = self.gen_s.enc_pro
             self.gen_IR = self.gen_a
         else:
             assert(False)
 
         if self.case_b == 'RGB':
             self.dis_RGB = self.dis_b
+            self.gen_b.enc_pro = self.gen_s.enc_pro
             self.gen_RGB = self.gen_b
         elif self.case_b == 'IR':
             self.dis_IR = self.dis_b
+            self.gen_b.enc_pro = self.gen_s.enc_pro
             self.gen_IR = self.gen_b
         else:
             assert(False)
+
+        self.gen_share = self.gen_s
 
 
     def gen_update(self, x_a, x_b, neg_a, neg_b, opt, phase):
@@ -597,6 +630,8 @@ class HICMD(nn.Module):
             self.gen_b = self.gen_IR  # IR图像的生成器。
         else:
             assert(False)
+
+        self.gen_s = self.gen_share
 
         # 这部分主要在于控制，生成器和鉴别器的训练先后次序，即是先训练哪一个，还是一起训练。
         # 根据参数设置，生成器和鉴别器是一起训练。
@@ -633,8 +668,10 @@ class HICMD(nn.Module):
                 self.gen_optimizer.zero_grad()  # 把生成器中优化参数的梯度置零。
                 self.zero_grad_G = False
 
-            c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码 生成原型编码c_a。  2 * 256 * 64 * 32
-            c_b = self.gen_b.enc_pro(Gx_b)     # 利用原型编码器 进行编码 生成原型编码c_b。
+            #c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码 生成原型编码c_a。  2 * 256 * 64 * 32
+            #c_b = self.gen_b.enc_pro(Gx_b)     # 利用原型编码器 进行编码 生成原型编码c_b。
+            c_a = self.gen_s.enc_pro(Gx_a)  # 利用原型编码器 进行编码 生成原型编码c_a。  2 * 256 * 64 * 32
+            c_b = self.gen_s.enc_pro(Gx_b)  # 利用原型编码器 进行编码 生成原型编码c_b。
             s_a = self.gen_a.enc_att(Gx_a)     # 利用属性编码器 进行编码 生成属性编码s_a。
             s_b = self.gen_b.enc_att(Gx_b)     # 生成属性编码s_b
             s_a_id = s_a.clone()     # 对属性编码 s_a 进行复制。
@@ -645,11 +682,15 @@ class HICMD(nn.Module):
             s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)   # 交换两个属性编码形成 新的属性编码. style-idx：0-255,  512-767, 1024-1279, 1536-1791
             # att_ex_idx:   256-511, 768-1023, 1280-1535, 1792-2047
             # 进行属性编码的交换。 
-            x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 生成图像Xb->a，这里是两张一起生成。
-            x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   # 生成图像Xa->a 。
+            #x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 生成图像Xb->a，这里是两张一起生成。
+            #x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   # 生成图像Xa->a 。
+            x_ba = self.gen_a.dec(c_b, s_a, self.gen_s.enc_pro.output_dim)  # 生成图像Xb->a，这里是两张一起生成。
+            x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_s.enc_pro.output_dim)  # 生成图像Xa->a 。
 
-            x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        # 生成图像Xa->b。
-            x_b_recon = self.gen_b.dec(c_b, s_b, self.gen_b.enc_pro.output_dim)   # 生成图像Xb->b。
+            #x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        # 生成图像Xa->b。
+            #x_b_recon = self.gen_b.dec(c_b, s_b, self.gen_b.enc_pro.output_dim)   # 生成图像Xb->b。
+            x_ab = self.gen_b.dec(c_a, s_b, self.gen_s.enc_pro.output_dim)  # 生成图像Xa->b。
+            x_b_recon = self.gen_b.dec(c_b, s_b, self.gen_s.enc_pro.output_dim)  # 生成图像Xb->b。
 
             x_ba_raw = x_ba.clone()
             x_ab_raw = x_ab.clone()
