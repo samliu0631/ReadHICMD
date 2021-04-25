@@ -6,14 +6,3 @@ eval_SYSU/
 __pycache__/
 .idea/
 .vscode/
-__pycache__/addnetwork.cpython-37.pyc
-__pycache__/data_sampler.cpython-37.pyc
-__pycache__/networks.cpython-37.pyc
-__pycache__/random_erasing.cpython-37.pyc
-__pycache__/reIDmodel_others.cpython-37.pyc
-__pycache__/reIDmodel.cpython-37.pyc
-__pycache__/set_option.cpython-37.pyc
-__pycache__/trainer.cpython-37.pyc
-__pycache__/util_etc.cpython-37.pyc
-__pycache__/util_test.cpython-37.pyc
-__pycache__/util_train.cpython-37.pyc

@@ -36,7 +36,7 @@ torch.manual_seed(opt.random_seed)  # 设置 (CPU) 生成随机数的种子.  �
 torch.cuda.manual_seed_all(opt.random_seed)  # 为所有GPU设置随机数的种子。
 opt = opt_settings(opt)
 opt = opt_addElement(opt)   # added by sam.
-# 加载训练数据。
+
 # 这里已经产生了dataloaders了。
 dataloaders, dataloaders_train_tsne, old_train_dataloader, data_info, data_sample, opt = data_settings(opt)
 opt = opt_test_settings(opt)
@@ -117,7 +117,7 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
                         trainer.save(opt, epoch)
                     #if epoch_cnt % 1000 == 0:
                         #torch.save(trainer.state_dict(), './pretrained/new/RegDB_01.pkl')
-                        torch.save(trainer.state_dict(), './pretrained/new/SYSU.pkl')
+                        #torch.save(trainer.state_dict(), './pretrained/new/SYSU.pkl')
 
                 # Drawing plot and saving phase
                 if (not opt.test_only) and (phase in opt.phase_train):
