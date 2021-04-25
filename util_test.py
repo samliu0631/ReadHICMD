@@ -623,11 +623,11 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
 
 
 def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
-
-    query_feature = torch.FloatTensor(result['query_f'])
-    gallery_feature = torch.FloatTensor(result['gallery_f'])
-    query_cam = result['query_cam']
-    query_label = result['query_label']
+# 这个函数对应的是计算 评估指标。  MAP比较第的问题，可以从这里面寻找。
+    query_feature = torch.FloatTensor(result['query_f'])       # 提取query图像序列中的特征。
+    gallery_feature = torch.FloatTensor(result['gallery_f'])   # 提取gallery图像序列中的特征。
+    query_cam = result['query_cam']           # 提取query图像序列中的相机类型。
+    query_label = result['query_label']       # 提取query图像序列中的标签类型。
     query_path = result['query_path']
     gallery_cam = result['gallery_cam']
     gallery_label = result['gallery_label']
@@ -647,7 +647,7 @@ def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
     add_name = ''
     if opt.eval_rerank: # rerank
         add_name += '(rerank)'
-        q_g_dist = np.dot(query_feature, np.transpose(gallery_feature))
+        q_g_dist = np.dot(query_feature, np.transpose(gallery_feature))  # 将两类特征进行
         q_q_dist = np.dot(query_feature, np.transpose(query_feature))
         g_g_dist = np.dot(gallery_feature, np.transpose(gallery_feature))
         since = time.time()
@@ -788,6 +788,7 @@ def evaluate_rerank(score,ql,qc,gl,gc):
 
 
 def compute_mAP(index, good_index, junk_index):
+    # 计算平均准确率。
     ap = 0
     cmc = torch.IntTensor(len(index)).zero_()
     if good_index.size == 0:  # if empty

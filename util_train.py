@@ -448,10 +448,10 @@ class print_and_plot():
             self.old_rank5[k] = CMC_single[4]
             self.old_rank10[k] = CMC_single[9]
             self.old_rank20[k] = CMC_single[19]
-            self.old_map[k] = ap_single
+            self.old_map[k] = ap_single   # ap_single 对应的就是MAP数据。
             self.best_epoch[k] = epoch
         self.test_record[k]['CMC'].append(CMC_single)
-        self.test_record[k]['MAP'].append(ap_single)
+        self.test_record[k]['MAP'].append(ap_single)   # ap_single 就是MAP数据。
         self.test_record[k]['EPOCH'].append(epoch)
 
 

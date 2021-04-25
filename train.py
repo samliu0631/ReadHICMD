@@ -202,7 +202,8 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
                 for k in range(len(result)):
                     result_k = result[k]
                     save_path = save_test_features(opt, epoch_cnt, result_k, result_RAM, result_multi, k)
-                    CMC_single, ap_single = evaluate_result(opt, epoch_cnt, result_k, result_RAM, result_multi, save_path, k)
+                    CMC_single, ap_single = evaluate_result(opt, epoch_cnt, result_k, result_RAM, result_multi, save_path, k)   # result-k中存储的就是
+                    # ap_single 中存储的是MAP数据。
                     # evaluate_result 函数中，计算两个模态的图像特征的距离。
                     pp.record_test_result(CMC_single, ap_single, epoch_cnt, k)
                     if not opt.test_only:
