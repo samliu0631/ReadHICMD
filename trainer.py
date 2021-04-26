@@ -97,7 +97,11 @@ class HICMD(nn.Module):
         gen_params = []
         self.gen_RGB = nn.Module()  # RGB图像产生器。　这里的gen_RGB就是一个相对独立的神经网络。
         self.gen_IR = nn.Module()   # IR图像产生器。　　gen_IR也是一个独立的神经网络。
+<<<<<<< Updated upstream
         self.gen_share = nn.Module()  # 共享的图像产生器。　　gen_share也是一个独立的神经网络。   add by ty
+=======
+        self.gen_share = nn.Module()
+>>>>>>> Stashed changes
         self.gen_RGB.enc_att = ft_resnet(depth = opt.G_style_resnet_depth, pretrained = opt.G_style_pretrained, stride = opt.stride, partpool = opt.G_style_partpool, pooltype = opt.G_style_typepool, input_channel = opt.G_input_dim)
         # 这里是RGB图像的属性编码器Ea1。注意这里使用了resnet。
         gen_params += list(self.gen_RGB.enc_att.parameters())    # gen_params记录所有　属性编码器　和　原型编码器　参数。        
@@ -114,10 +118,20 @@ class HICMD(nn.Module):
         self.gen_IR.enc_pro = copy.deepcopy(self.gen_RGB.enc_pro)  #初始化IR图像的原型编码器。
         gen_params += list(self.gen_IR.enc_pro.parameters())
 
+<<<<<<< Updated upstream
         self.gen_share.enc_pro = ResidualEncoder(n_downsample = opt.G_n_downsamp, n_res = opt.G_n_residual, input_dim = opt.G_input_dim, \
                                                 bottleneck_dim = bottleneck_dim, norm = opt.G_enc_res_norm, activ = opt.G_act, pad_type = opt.G_pad_type, \
                                                 tanh = opt.G_tanh, res_type = opt.G_res_type, enc_type = opt.G_enc_type, flag_ASPP = opt.G_ASPP, \
                                                 init = opt.G_init, w_lrelu = opt.G_w_lrelu)  # 初始化共享图像的原型编码器
+=======
+        self.gen_share.enc_pro = ResidualEncoder(n_downsample=opt.G_n_downsamp, n_res=opt.G_n_residual,
+                                              input_dim=opt.G_input_dim, \
+                                              bottleneck_dim=bottleneck_dim, norm=opt.G_enc_res_norm, activ=opt.G_act,
+                                              pad_type=opt.G_pad_type, \
+                                              tanh=opt.G_tanh, res_type=opt.G_res_type, enc_type=opt.G_enc_type,
+                                              flag_ASPP=opt.G_ASPP, \
+                                              init=opt.G_init, w_lrelu=opt.G_w_lrelu)  # 初始化共享原型编码器
+>>>>>>> Stashed changes
         gen_params += list(self.gen_share.enc_pro.parameters())
 
         # ********************** Decoder *********************************************************
@@ -167,7 +181,11 @@ class HICMD(nn.Module):
         #***** prototype backbone **************************************************************************************
         id_dim = 0
         #input_dim = self.gen_RGB.enc_pro.output_dim   # 输入维度为  原型编码器的 输出维度。 256
+<<<<<<< Updated upstream
         input_dim = self.gen_share.enc_pro.output_dim  # 输入维度为  原型编码器的 输出维度。 256
+=======
+        input_dim = self.gen_share.enc_pro.output_dim
+>>>>>>> Stashed changes
         self.backbone_pro = ft_resnet2(input_dim = input_dim, depth = opt.backbone_pro_resnet_depth, stride = opt.stride,\
                                                max_num_conv = opt.backbone_pro_max_num_conv, max_ouput_dim = opt.backbone_pro_max_ouput_dim, \
                                                pretrained = opt.backbone_pro_pretrained, partpool = opt.backbone_pro_partpool, pooltype = opt.backbone_pro_typepool)
@@ -216,7 +234,11 @@ class HICMD(nn.Module):
             self.combine_weight = self.combine_weight.cuda()
             self.gen_RGB = self.gen_RGB.cuda()
             self.gen_IR = self.gen_IR.cuda()
+<<<<<<< Updated upstream
             self.gen_share = self.gen_IR.cuda()  # add by ty
+=======
+            self.gen_share = self.gen_share.cuda()
+>>>>>>> Stashed changes
             self.dis_RGB = self.dis_RGB.cuda()
             self.dis_IR = self.dis_IR.cuda()
             print('===> [Start training]' + '-' * 30)
@@ -483,7 +505,10 @@ class HICMD(nn.Module):
         else:
             assert(False)
 
+<<<<<<< Updated upstream
         #共享鉴别器
+=======
+>>>>>>> Stashed changes
         self.gen_s = self.gen_share
 
         if self.cnt_cumul > 1:
@@ -696,16 +721,20 @@ class HICMD(nn.Module):
             x_ab_raw = x_ab.clone()
 
             if Do_gen_update:
-                c_b_recon = self.gen_a.enc_pro(x_ba)     # 对Xba提取  原型编码, 得到原型编码 c_b_recon
-                c_a_recon = self.gen_b.enc_pro(x_ab)     # 对Xab提取  原型编码, 得到原型编码 c_a_recon
+                #c_b_recon = self.gen_a.enc_pro(x_ba)     # 对Xba提取  原型编码, 得到原型编码 c_b_recon
+                #c_a_recon = self.gen_b.enc_pro(x_ab)     # 对Xab提取  原型编码, 得到原型编码 c_a_recon
+                c_b_recon = self.gen_s.enc_pro(x_ba)  # 对Xba提取  原型编码, 得到原型编码 c_b_recon
+                c_a_recon = self.gen_s.enc_pro(x_ab)  # 对Xab提取  原型编码, 得到原型编码 c_a_recon
                 s_a_recon = self.gen_a.enc_att(x_ba)     # 对Xba提取  属性编码, 得到属性源码 s_a_recon
                 s_b_recon = self.gen_b.enc_att(x_ab)     # 对Xab提取  属性编码, 得到属性源码 s_b_recon.
                 s_a_recon_id = s_a_recon.clone()
                 s_b_recon_id = s_b_recon.clone()
 
                 if opt.w_cycle_x > 0:
-                    x_aba = self.gen_a.dec(c_a_recon, s_a, self.gen_a.enc_pro.output_dim)    # 生成图像Xaba。
-                    x_bab = self.gen_b.dec(c_b_recon, s_b, self.gen_b.enc_pro.output_dim)    # 生成图像Xbab。
+                    #x_aba = self.gen_a.dec(c_a_recon, s_a, self.gen_a.enc_pro.output_dim)    # 生成图像Xaba。
+                    #x_bab = self.gen_b.dec(c_b_recon, s_b, self.gen_b.enc_pro.output_dim)    # 生成图像Xbab。
+                    x_aba = self.gen_a.dec(c_a_recon, s_a, self.gen_s.enc_pro.output_dim)  # 生成图像Xaba。
+                    x_bab = self.gen_b.dec(c_b_recon, s_b, self.gen_s.enc_pro.output_dim)  # 生成图像Xbab。
 
                 # reconstruction loss (same)
                 self.loss_gen_recon_x_a = self.recon_criterion(x_a_recon, Gx_a_raw)
@@ -770,8 +799,10 @@ class HICMD(nn.Module):
                 tmp.extend(self.att_pose_idx)
                 s_a3_add, s_b3_add = change_two_index(s_a3_add, s_b3_add, tmp, self.att_illum_idx)  # only modality change
 
-                x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim)  # (ID, pose) b, (modality) a
-                x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim)  # (ID, pose) a, (modality) b
+                #x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim)  # (ID, pose) b, (modality) a
+                #x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim)  # (ID, pose) a, (modality) b
+                x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_s.enc_pro.output_dim)  # (ID, pose) b, (modality) a
+                x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_s.enc_pro.output_dim)  # (ID, pose) a, (modality) b
                 self.loss_gen_adv_a3 = self.dis_a.calc_gen_loss(x_ba3)
                 self.loss_gen_adv_b3 = self.dis_b.calc_gen_loss(x_ab3)
                 self.loss_gen_adv += opt.w_gan * (self.loss_gen_adv_a3 + self.loss_gen_adv_b3)
@@ -819,8 +850,10 @@ class HICMD(nn.Module):
             x_a_re_id = x_a_re_id.detach()  # 从梯度计算中剥离。
             x_b_re_id = x_b_re_id.detach()  # 从梯度计算中剥离。
 
-            c_a_id = self.gen_a.enc_pro(x_a_re_id)  # 计算原型编码。
-            c_b_id = self.gen_b.enc_pro(x_b_re_id)  # 计算原型编码，得到c_b_id
+            #c_a_id = self.gen_a.enc_pro(x_a_re_id)  # 计算原型编码。
+            #c_b_id = self.gen_b.enc_pro(x_b_re_id)  # 计算原型编码，得到c_b_id
+            c_a_id = self.gen_s.enc_pro(x_a_re_id)  # 计算原型编码。
+            c_b_id = self.gen_s.enc_pro(x_b_re_id)  # 计算原型编码，得到c_b_id
             s_a_id = self.gen_a.enc_att(x_a_re_id)  # 计算图像x_a_re_id的属性编码。
             s_b_id = self.gen_b.enc_att(x_b_re_id)  # 计算属性编码。
 
@@ -829,8 +862,10 @@ class HICMD(nn.Module):
             x_ab_re_id = x_ab_re_id.detach()  # 从梯度计算中剥离。
             x_ba_re_id = x_ba_re_id.detach()  # 从梯度计算中剥离。
 
-            c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算图像x_ab_re_id的原型编码
-            c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)   # 计算。。
+            #c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算图像x_ab_re_id的原型编码
+            #c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)   # 计算。。
+            c_a_recon_id = self.gen_s.enc_pro(x_ab_re_id)  # 计算图像x_ab_re_id的原型编码
+            c_b_recon_id = self.gen_s.enc_pro(x_ba_re_id)  # 计算。。
             s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)  # 计算x_ba_re_id属性编码
             s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)  # 计算属性编码。
 
@@ -894,8 +929,10 @@ class HICMD(nn.Module):
                 y_a_re_id = y_a_re_id.detach()  # 从梯度计算中剥离。
                 y_b_re_id = y_b_re_id.detach()  # 从梯度计算中剥离。
 
-                c_a_neg_id = self.gen_a.enc_pro(y_a_re_id)
-                c_b_neg_id = self.gen_b.enc_pro(y_b_re_id)
+                #c_a_neg_id = self.gen_a.enc_pro(y_a_re_id)
+                #c_b_neg_id = self.gen_b.enc_pro(y_b_re_id)
+                c_a_neg_id = self.gen_s.enc_pro(y_a_re_id)
+                c_b_neg_id = self.gen_s.enc_pro(y_b_re_id)
                 s_a_neg_id = self.gen_a.enc_att(y_a_re_id)
                 s_b_neg_id = self.gen_b.enc_att(y_b_re_id)
 
@@ -1092,13 +1129,14 @@ class HICMD(nn.Module):
             # Added by sam.
             # ID domain adversarial loss
             self.loss_gen_id_adv = self.id_dis.calc_gen_loss(f_all_domain_adv)
+            self.loss_type['ID_ADV'] = self.loss_gen_id_adv.item() if self.loss_gen_id_adv != 0 else 0
             # 对目标域（IR域）,和包含IR域产生的原型编码 或 风格属性编码的 特征编码 计算域鉴别对抗损失函数。
             # 这个损失函数定义的目标是，使得生成器生成的 最终特征编码 接近 RGB域的特征编码，无论是IR域产生的特征编码，还是包含IR域的混合特征编码。
             # 而域鉴别器的目标就是 把RGB的特征编码，和其他类别的鉴别出来。
 
             #self.loss_id_total = self.loss_CE + self.loss_trip
             # Change the total loss by adding the ID domain adversarial loss.  Added by sam.
-            self.loss_id_total = self.loss_CE + self.loss_trip+ self.loss_gen_id_adv
+            self.loss_id_total = self.loss_CE + self.loss_trip + self.loss_gen_id_adv
 
             if opt.HFL_ratio > 0:
                 self.loss_id_total *= opt.HFL_ratio
@@ -1114,6 +1152,7 @@ class HICMD(nn.Module):
                 self.acc_type['Trip'] = self.acc_type['Trip']
                 self.etc_type['Trip_reg'] = self.etc_type['Trip_reg']
                 self.etc_type['Trip_margin'] = self.etc_type['Trip_margin']
+                self.loss_type['ID_ADV'] = self.loss_type['ID_ADV']
             except:
                 self.loss_type['TOT_ID'] = 0
                 self.loss_type['CE'] = 0
@@ -1122,6 +1161,7 @@ class HICMD(nn.Module):
                 self.acc_type['Trip'] = 0
                 self.etc_type['Trip_reg'] = 0
                 self.etc_type['Trip_margin'] = 0
+                self.loss_type['ID_ADV'] = 0
 
         
         
@@ -1144,9 +1184,9 @@ class HICMD(nn.Module):
             self.gen_optimizer.step()
             self.zero_grad_G = True
             try:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.old_loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.old_loss_type['TOT_ID'] + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
         elif Do_id_update:
             self.loss_id_total.backward()
             self.gen_optimizer.step()
@@ -1154,9 +1194,9 @@ class HICMD(nn.Module):
             self.id_optimizer.step()
             self.zero_grad_ID = True
             try:
-                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
         else:
             try:
                 self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.old_loss_type['TOT_ID'] + self.old_loss_type['TOT_D']
@@ -1166,9 +1206,11 @@ class HICMD(nn.Module):
 
         if self.case_a == 'RGB':
             self.dis_RGB = self.dis_a   # 将优化后的网络模型 传回 HICMD实例对象中
+            self.gen_a.enc_pro = self.gen_s.enc_pro
             self.gen_RGB = self.gen_a
         elif self.case_a == 'IR':
             self.dis_IR = self.dis_a
+            self.gen_a.enc_pro = self.gen_s.enc_pro
             self.gen_IR = self.gen_a
         else:
             assert(False)
@@ -1176,12 +1218,16 @@ class HICMD(nn.Module):
 
         if self.case_b == 'RGB':
             self.dis_RGB = self.dis_b  # 将优化后的网络模型 传回 HICMD实例对象中
+            self.gen_b.enc_pro = self.gen_s.enc_pro
             self.gen_RGB = self.gen_b
         elif self.case_b == 'IR':
             self.dis_IR = self.dis_b
+            self.gen_b.enc_pro = self.gen_s.enc_pro
             self.gen_IR = self.gen_b
         else:
             assert(False)
+
+        self.gen_share = self.gen_s
 
 
     def forward(self, opt, input, modal, cam):

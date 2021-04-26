@@ -825,7 +825,7 @@ def extract_test_features(opt, trainer, dataloaders, data_info):
 
         opt.resume_dir = os.path.join(opt.test_dir, 'checkpoints')
         opt.resume_name = opt.test_name
-        trainer.cnt_cumul = trainer.resume(opt)
+        trainer.cnt_cumul = trainer.resume(opt)  # 获得迭代次数
 
         trainer = trainer.eval()
 
@@ -854,7 +854,7 @@ def extract_test_features(opt, trainer, dataloaders, data_info):
     for k in range(len(gallery_feature_raw)):
         result_RAM += [{'gallery_f_raw': gallery_feature_raw[k], 'query_f_raw': query_feature_raw[k]}]
     result_multi = []
-    if opt.test_multi:
+    if opt.test_multi:  #这一部分不执行。
         for k in range(len(mquery_feature)):
             result_multi += [{'mquery_f': mquery_feature[k].numpy(), 'mquery_label': data_info['mquery_label'],
                             'mquery_cam': data_info['mquery_cam']}]
