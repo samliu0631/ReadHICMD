@@ -274,10 +274,12 @@ def k_reciprocal_neigh( initial_rank, i, k1):
 def re_ranking(q_g_dist, q_q_dist, g_g_dist, k1=20, k2=6, lambda_value=0.3):
     # The following naming, e.g. gallery_num, is different from outer scope.
     # Don't care about it.
+    # 拼接两个数组。 axis=1，表示横向拼接， axis=0,表示纵向拼接。
     original_dist = np.concatenate(
       [np.concatenate([q_q_dist, q_g_dist], axis=1),
        np.concatenate([q_g_dist.T, g_g_dist], axis=1)],
       axis=0)
+    #
     original_dist = 2. - 2 * original_dist   # change the cosine similarity metric to euclidean similarity metric
     original_dist = np.power(original_dist, 2).astype(np.float32)
     original_dist = np.transpose(1. * original_dist/np.max(original_dist,axis = 0))
