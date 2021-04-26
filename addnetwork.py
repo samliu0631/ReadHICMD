@@ -36,14 +36,14 @@ class IdDis(nn.Module):
     # Domain ID Discriminator architecture
     def __init__(self, input_dim, params, fp16):
         super(IdDis, self).__init__()
-        self.n_layer = params['id_nLayer']    # number of layers in domain id discriminator
-        self.dim = params['id_nFilter']       # number of layer filters in domain id discriminator 1024 
-        self.gan_type = params['id_ganType']  # the type of the network of ID discriminator
-        self.activ = params['id_activ']       # activation function style [relu/lrelu/prelu/selu/tanh] lrelu
+        self.n_layer = params['id_nLayer']    # number of layers in domain id discriminator　　　　４
+        self.dim = params['id_nFilter']       # number of layer filters in domain id discriminator 　　　　1024 
+        self.gan_type = params['id_ganType']  # the type of the network of ID discriminator　　　　　　‘lsgan’
+        self.activ = params['id_activ']       # activation function style [relu/lrelu/prelu/selu/tanh]  'lrelu'
         self.norm = params['id_norm']         # normalization layer [none/bn/in/ln]   bn
         self.ds = params['id_ds']             # down sampling rate in domain id discriminator   2 
-        self.input_dim = input_dim            # 输入维度为appearance code的长度，  2024
-        self.fp16 = fp16                      # fp16=False   这是一个标志量。用来描述是否使用了16位浮点数。
+        self.input_dim = input_dim            # 输入维度为appearance code的长度，这里是id相关特征的向量。  2024
+        self.fp16 = fp16                      # fp16=False   这是一个标志量。用来描述是否使用了16位浮点数。　　false
 
         self.fcnet = self.one_fcnet()         # 构建网络。
         self.fcnet.apply(weights_init('gaussian'))  # 这一步应该是给网络初始参数。

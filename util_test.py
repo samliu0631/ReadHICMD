@@ -204,34 +204,38 @@ def evaluate_sysu(distmat, q_pids, g_pids, q_camids, g_camids, max_rank=20):
 
 def evaluate_regdb(distmat, q_pids, g_pids, max_rank=20):
     # 对regdb数据库，计算其评估结果。
-    num_q, num_g = distmat.shape
-    if num_g < max_rank:
+    num_q, num_g = distmat.shape　　　# num_q: number of image in query. num_g:number of image in gallery.
+    if num_g < max_rank: # 判断ｇａｌｌｅｒｙ中的图像数量是否超过ｍａｘ_rank
         max_rank = num_g
         print("Note: number of gallery samples is quite small, got {}".format(num_g))
-    indices = np.argsort(distmat, axis=1)
-    matches = (g_pids[indices] == q_pids[:, np.newaxis]).astype(np.int32) # 010011011 <
-
+    indices = np.argsort(distmat, axis=1)  #np.argsort ,按照由小到大排列，按行排序.　indices中记录的是元素编号。
+    # 但实际上，
+    matches = (g_pids[indices] == q_pids[:, np.newaxis]).astype(np.int32) # 010011011 <   q_pids[:, np.newaxis] 为变量增加一个维度。
+    # 这里g_pids[indices]　　每一行的含义是：　　当前行号对应的query图像，所有gallery图像的标签号（０－２０５）按照相似度由高到底排序。
+    # q_pids: query图像编号标签。　　g_pids:gallery　图像编号标签。
+    # g_pids[indices] == q_pids[:, np.newaxis] 表示的含义是所有query图像，算法正确匹配的ｂｏｏｌ矩阵。理想情况应该第一列全为１，其余全为０．
     # compute cmc curve for each query
     all_cmc = []
     all_AP = []
     num_valid_q = 0.  # number of valid query
 
     # only two cameras
-    q_camids = np.ones(num_q).astype(np.int32)
-    g_camids = 2 * np.ones(num_g).astype(np.int32)
+    q_camids = np.ones(num_q).astype(np.int32)   # 生成query图像ｉｄ。 indicated by "1"
+    g_camids = 2 * np.ones(num_g).astype(np.int32)　# generate the id of gallery. indicated by "2"
 
-    for q_idx in range(num_q):
+    for q_idx in range(num_q):  # iterate through all the query images.
         # get query pid and camid
-        q_pid = q_pids[q_idx]
-        q_camid = q_camids[q_idx]
+        q_pid = q_pids[q_idx]        # Get the image label of the current query image.
+        q_camid = q_camids[q_idx]    # Get the cam id of query image.
 
-        # remove gallery samples that have the same pid and camid with query
-        order = indices[q_idx]
-        remove = (g_pids[order] == q_pid) & (g_camids[order] == q_camid)
+        # remove gallery samples that have the same pid and camid with query。实际上并没有这种情况。所以不用ｒｅｍｏｖｅ。
+        order = indices[q_idx]  # 获得当前query图像中，在gallery图像中按照识别分数由高到低，对应的ｇａｌｌｅｒｙ图像索引号（０－２０５９）。2060维度的向量。
+        remove = (g_pids[order] == q_pid) & (g_camids[order] == q_camid)　　# 
         keep = np.invert(remove)
 
         # compute cmc curve
         raw_cmc = matches[q_idx][keep]  # binary vector, positions with value 1 are correct matches
+        # 提取当前query图像的匹配向量。（相对于２０６０个gallery图像。）
         if not np.any(raw_cmc):
             # this condition is true when query identity does not appear in gallery
             continue
@@ -627,14 +631,14 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
 
 def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
 # 这个函数对应的是计算 评估指标。  MAP比较第的问题，可以从这里面寻找。
-    query_feature = torch.FloatTensor(result['query_f'])       # 提取query图像序列中的特征。  torch.FloatTensor类型转换, 将list ,numpy转化为tensor
-    gallery_feature = torch.FloatTensor(result['gallery_f'])   # 提取gallery图像序列中的特征。
-    query_cam = result['query_cam']                            # 提取query图像序列中的相机类型。
+    query_feature = torch.FloatTensor(result['query_f'])       # 2060*2048,表示2060(206*10)张图形，提取query图像序列中的特征。  torch.FloatTensor类型转换, 将list ,numpy转化为tensor, 提取的特征为2048维度。
+    gallery_feature = torch.FloatTensor(result['gallery_f'])   # 2060*2048,表示2060(206*10)张图形,提取gallery图像序列中的特征。
+    query_cam = result['query_cam']                            # 提取query图像序列中的相机类型。　　全部为１，　表示RGB图像。
     query_label = result['query_label']                        # 提取query图像序列中的标签类型。
-    query_path = result['query_path']
-    gallery_cam = result['gallery_cam']
-    gallery_label = result['gallery_label']
-    gallery_path = result['gallery_path']
+    query_path = result['query_path']         # 存储ｑｕｅｒｙ文件夹中每个图像的路径。
+    gallery_cam = result['gallery_cam']      #　相机类型编码全部为　０　　表示红外图像
+    gallery_label = result['gallery_label']  # 标签数据就是图像文件夹的编号。
+    gallery_path = result['gallery_path']    # 记录每个图像
     if (type(query_cam) == list):
         query_cam = np.asarray(query_cam)       # 将list变量变为asarray数组变量。 
         query_label = np.asarray(query_label)
@@ -648,7 +652,7 @@ def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
 
 
     add_name = ''
-    if opt.eval_rerank: # rerank
+    if opt.eval_rerank: # rerank　　＃　这部分不执行。
         add_name += '(rerank)'
         q_g_dist = np.dot(query_feature, np.transpose(gallery_feature))   # 将两类特征进行点乘。
         q_q_dist = np.dot(query_feature, np.transpose(query_feature))     # 计算query_feature的模
@@ -661,10 +665,10 @@ def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
     if opt.data_flag == 5: # for RegDB  
         if opt.eval_rerank:
             distmat = -re_rank
-        else:
-            distmat = np.matmul(query_feature, np.transpose(gallery_feature))
+        else:   # execute this line.
+            distmat = np.matmul(query_feature, np.transpose(gallery_feature))  # np.matmul()　表示矩阵乘法。这里计算的是每个query和gallery特征的点乘。2060*2060维度。
         CMC, ap = evaluate_regdb(-distmat, query_label, gallery_label, max_rank = opt.num_print_rank)
-
+    # distmat有正　有负。　　这里给dismat加－号，是为了表示，数值越小，两个距离越小。因为dismat中元素为１，两个向量之间的距离最小．
 
     # This is just for checking performance trends. In the case of SYSU, the evaluation is done with the official matlab code in the matlab folder.
     elif opt.data_flag == 6: # for SYSU

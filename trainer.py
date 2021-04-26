@@ -77,11 +77,11 @@ class HICMD(nn.Module):
         # 需要调整一下输入的维度。
         beta1 = hyperparameters['beta1']  # 0
         beta2 = hyperparameters['beta2']  # 0.999
-        lr_id_d = hyperparameters['lr_id_d']
+        lr_id_d = hyperparameters['lr_id_d']  # 1e-5
         id_dis_params = list(self.id_dis.parameters())
         self.id_dis_opt = torch.optim.Adam([p for p in id_dis_params if p.requires_grad],
                                            lr=lr_id_d, betas=(beta1, beta2),
-                                           weight_decay=hyperparameters['weight_decay'])
+                                           weight_decay=hyperparameters['weight_decay'])  # weight_decay: 0.0005
         self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters)
         self.id_dis_scheduler.gamma = hyperparameters['gamma2']  # 0.1
 
