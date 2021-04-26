@@ -203,6 +203,7 @@ def evaluate_sysu(distmat, q_pids, g_pids, q_camids, g_camids, max_rank=20):
 
 
 def evaluate_regdb(distmat, q_pids, g_pids, max_rank=20):
+    # 对regdb数据库，计算其评估结果。
     num_q, num_g = distmat.shape
     if num_g < max_rank:
         max_rank = num_g
@@ -624,16 +625,16 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
 
 def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
 # 这个函数对应的是计算 评估指标。  MAP比较第的问题，可以从这里面寻找。
-    query_feature = torch.FloatTensor(result['query_f'])       # 提取query图像序列中的特征。
+    query_feature = torch.FloatTensor(result['query_f'])       # 提取query图像序列中的特征。  torch.FloatTensor类型转换, 将list ,numpy转化为tensor
     gallery_feature = torch.FloatTensor(result['gallery_f'])   # 提取gallery图像序列中的特征。
-    query_cam = result['query_cam']           # 提取query图像序列中的相机类型。
-    query_label = result['query_label']       # 提取query图像序列中的标签类型。
+    query_cam = result['query_cam']                            # 提取query图像序列中的相机类型。
+    query_label = result['query_label']                        # 提取query图像序列中的标签类型。
     query_path = result['query_path']
     gallery_cam = result['gallery_cam']
     gallery_label = result['gallery_label']
     gallery_path = result['gallery_path']
     if (type(query_cam) == list):
-        query_cam = np.asarray(query_cam)
+        query_cam = np.asarray(query_cam)       # 将list变量变为asarray数组变量。 
         query_label = np.asarray(query_label)
         gallery_cam = np.asarray(gallery_cam)
         gallery_label = np.asarray(gallery_label)
@@ -647,15 +648,15 @@ def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
     add_name = ''
     if opt.eval_rerank: # rerank
         add_name += '(rerank)'
-        q_g_dist = np.dot(query_feature, np.transpose(gallery_feature))  # 将两类特征进行
-        q_q_dist = np.dot(query_feature, np.transpose(query_feature))
-        g_g_dist = np.dot(gallery_feature, np.transpose(gallery_feature))
+        q_g_dist = np.dot(query_feature, np.transpose(gallery_feature))   # 将两类特征进行点乘。
+        q_q_dist = np.dot(query_feature, np.transpose(query_feature))     # 计算query_feature的模
+        g_g_dist = np.dot(gallery_feature, np.transpose(gallery_feature)) # 计算gallery_feature的模。
         since = time.time()
-        re_rank = re_ranking(q_g_dist, q_q_dist, g_g_dist)
+        re_rank = re_ranking(q_g_dist, q_q_dist, g_g_dist)   # 根据结果对结果进行排序。
         time_elapsed = time.time() - since
         print('Reranking complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
 
-    if opt.data_flag == 5: # for RegDB
+    if opt.data_flag == 5: # for RegDB  
         if opt.eval_rerank:
             distmat = -re_rank
         else:
@@ -690,7 +691,7 @@ def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
         CMC = CMC.numpy()
 
     CMC *= 100
-    ap *= 100
+    ap *= 100  # average precision。  百分化的平均精度
 
     CMC = list(CMC)
     if len(CMC) < 100:
@@ -705,7 +706,7 @@ def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
         f.write('Rank{}:{:.4f}\n'.format(i+1, CMC[i]))
     f.close()
     CMC_single = CMC
-    ap_single = ap
+    ap_single = ap   # 对平均准确度进行衡量。
 
     # multiple-query
     if 'mquery_f' in result_multi:
@@ -768,7 +769,7 @@ def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
 
 
     return CMC_single, ap_single
-
+    # ap_single 值得是平均准确度。
 
 def evaluate_rerank(score,ql,qc,gl,gc):
     index = np.argsort(score)  #from small to large
@@ -824,9 +825,9 @@ def extract_test_features(opt, trainer, dataloaders, data_info):
         # load_path = opt.test_dir + opt.test_name + '.pth'
         # trainer = load_network(load_path, trainer)
 
-        opt.resume_dir = os.path.join(opt.test_dir, 'checkpoints')
+        opt.resume_dir = os.path.join(opt.test_dir, 'checkpoints')  # 获得断点的存储路径并存储在opt中。
         opt.resume_name = opt.test_name
-        trainer.cnt_cumul = trainer.resume(opt)
+        trainer.cnt_cumul = trainer.resume(opt)   # 加载断点。
 
         trainer = trainer.eval()
 

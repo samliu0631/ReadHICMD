@@ -193,7 +193,7 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
                                       'train_{}'.format(str(trainer.cnt_cumul).zfill(7)))
 
                 # test
-                result, result_RAM, result_multi = extract_test_features(opt, trainer, dataloaders, data_info)
+                result, result_RAM, result_multi = extract_test_features(opt, trainer, dataloaders, data_info)  # 在数据中提取特征。
                 # 这个函数中用来提取不同模态图像中的特征编码。
                 if opt.test_tsne:
                     with torch.no_grad():
