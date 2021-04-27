@@ -204,7 +204,7 @@ def evaluate_sysu(distmat, q_pids, g_pids, q_camids, g_camids, max_rank=20):
 
 def evaluate_regdb(distmat, q_pids, g_pids, max_rank=20):
     # 对regdb数据库，计算其评估结果。
-    num_q, num_g = distmat.shape　　　# num_q: number of image in query. num_g:number of image in gallery.
+    num_q, num_g = distmat.shape # num_q: number of image in query. num_g:number of image in gallery.
     if num_g < max_rank: # 判断ｇａｌｌｅｒｙ中的图像数量是否超过ｍａｘ_rank
         max_rank = num_g
         print("Note: number of gallery samples is quite small, got {}".format(num_g))
@@ -221,7 +221,7 @@ def evaluate_regdb(distmat, q_pids, g_pids, max_rank=20):
 
     # only two cameras
     q_camids = np.ones(num_q).astype(np.int32)   # 生成query图像ｉｄ。 indicated by "1"
-    g_camids = 2 * np.ones(num_g).astype(np.int32)　# generate the id of gallery. indicated by "2"
+    g_camids = 2 * np.ones(num_g).astype(np.int32) # generate the id of gallery. indicated by "2"
 
     for q_idx in range(num_q):  # iterate through all the query images.
         # get query pid and camid
@@ -230,7 +230,7 @@ def evaluate_regdb(distmat, q_pids, g_pids, max_rank=20):
 
         # remove gallery samples that have the same pid and camid with query。实际上并没有这种情况。所以不用ｒｅｍｏｖｅ。
         order = indices[q_idx]  # 获得当前query图像中，在gallery图像中按照识别分数由高到低，对应的ｇａｌｌｅｒｙ图像索引号（０－２０５９）。2060维度的向量。
-        remove = (g_pids[order] == q_pid) & (g_camids[order] == q_camid)　　# 
+        remove = (g_pids[order] == q_pid) & (g_camids[order] == q_camid) # 
         keep = np.invert(remove)
 
         # compute cmc curve
