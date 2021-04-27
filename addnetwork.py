@@ -42,7 +42,7 @@ class IdDis(nn.Module):
         self.activ = params['id_activ']       # activation function style [relu/lrelu/prelu/selu/tanh]  'lrelu'
         self.norm = params['id_norm']         # normalization layer [none/bn/in/ln]   bn
         self.ds = params['id_ds']             # down sampling rate in domain id discriminator   2 
-        self.input_dim = input_dim            # 输入维度为appearance code的长度，这里是id相关特征的向量。  2024
+        self.input_dim = input_dim            # 输入维度为appearance code的长度，这里是id相关特征的向量。  2048
         self.fp16 = fp16                      # fp16=False   这是一个标志量。用来描述是否使用了16位浮点数。　　false
 
         self.fcnet = self.one_fcnet()         # 构建网络。

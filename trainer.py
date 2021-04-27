@@ -28,7 +28,7 @@ def get_config(config):
     with open(config, 'r') as stream:
         return yaml.load(stream)
 
-def get_scheduler(optimizer, hyperparameters, iterations=-1):
+def get_scheduler(optimizer, hyperparameters, opt, iterations=-1):
     if 'lr_policy' not in hyperparameters or hyperparameters['lr_policy'] == 'constant':
         scheduler = None # constant scheduler
     elif hyperparameters['lr_policy'] == 'step':
@@ -36,7 +36,8 @@ def get_scheduler(optimizer, hyperparameters, iterations=-1):
                                         gamma=hyperparameters['gamma'], last_epoch=iterations)
     elif hyperparameters['lr_policy'] == 'multistep':
         #50000 -- 75000 --
-        step = hyperparameters['step_size']
+        #step = hyperparameters['step_size']
+        step = opt.step_size_dis
         scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[step, step+step//2, step+step//2+step//4],
                                         gamma=hyperparameters['gamma'], last_epoch=iterations)
     else:
@@ -82,7 +83,7 @@ class HICMD(nn.Module):
         self.id_dis_opt = torch.optim.Adam([p for p in id_dis_params if p.requires_grad],
                                            lr=lr_id_d, betas=(beta1, beta2),
                                            weight_decay=hyperparameters['weight_decay'])  # weight_decay: 0.0005
-        self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters)
+        self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters, opt)
         self.id_dis_scheduler.gamma = hyperparameters['gamma2']  # 0.1
 
 
@@ -442,7 +443,6 @@ class HICMD(nn.Module):
         else:
             assert(False)
 
-
     def dis_update(self, x_a, x_b, opt, phase):
 
 
@@ -570,7 +570,6 @@ class HICMD(nn.Module):
             self.gen_IR = self.gen_b
         else:
             assert(False)
-
 
     def gen_update(self, x_a, x_b, neg_a, neg_b, opt, phase):
 
@@ -1051,13 +1050,14 @@ class HICMD(nn.Module):
             # Added by sam.
             # ID domain adversarial loss
             self.loss_gen_id_adv = self.id_dis.calc_gen_loss(f_all_domain_adv)
+            self.loss_type['ID_ADV'] = self.loss_gen_id_adv.item() if self.loss_gen_id_adv != 0 else 0
             # 对目标域（IR域）,和包含IR域产生的原型编码 或 风格属性编码的 特征编码 计算域鉴别对抗损失函数。
             # 这个损失函数定义的目标是，使得生成器生成的 最终特征编码 接近 RGB域的特征编码，无论是IR域产生的特征编码，还是包含IR域的混合特征编码。
             # 而域鉴别器的目标就是 把RGB的特征编码，和其他类别的鉴别出来。
 
             #self.loss_id_total = self.loss_CE + self.loss_trip
             # Change the total loss by adding the ID domain adversarial loss.  Added by sam.
-            self.loss_id_total = self.loss_CE + self.loss_trip+ self.loss_gen_id_adv
+            self.loss_id_total = self.loss_CE + self.loss_trip + self.loss_gen_id_adv
 
             if opt.HFL_ratio > 0:
                 self.loss_id_total *= opt.HFL_ratio
@@ -1073,6 +1073,7 @@ class HICMD(nn.Module):
                 self.acc_type['Trip'] = self.acc_type['Trip']
                 self.etc_type['Trip_reg'] = self.etc_type['Trip_reg']
                 self.etc_type['Trip_margin'] = self.etc_type['Trip_margin']
+                self.loss_type['ID_ADV'] = self.loss_type['ID_ADV']
             except:
                 self.loss_type['TOT_ID'] = 0
                 self.loss_type['CE'] = 0
@@ -1081,10 +1082,9 @@ class HICMD(nn.Module):
                 self.acc_type['Trip'] = 0
                 self.etc_type['Trip_reg'] = 0
                 self.etc_type['Trip_margin'] = 0
+                self.loss_type['ID_ADV'] = 0
 
-        
-        
-        
+
         # Update ID-PIG and HFL
         # 这一步骤主要是对ID-PIG和HFL中的参数进行更新。
 
@@ -1103,9 +1103,9 @@ class HICMD(nn.Module):
             self.gen_optimizer.step()
             self.zero_grad_G = True
             try:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.old_loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.old_loss_type['TOT_ID'] + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
         elif Do_id_update:
             self.loss_id_total.backward()
             self.gen_optimizer.step()
@@ -1113,9 +1113,9 @@ class HICMD(nn.Module):
             self.id_optimizer.step()
             self.zero_grad_ID = True
             try:
-                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
         else:
             try:
                 self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.old_loss_type['TOT_ID'] + self.old_loss_type['TOT_D']
@@ -1141,7 +1141,6 @@ class HICMD(nn.Module):
             self.gen_IR = self.gen_b
         else:
             assert(False)
-
 
     def forward(self, opt, input, modal, cam):
     # The subclass of nn.Module must has the implementation of forward.
@@ -1281,7 +1280,6 @@ class HICMD(nn.Module):
 
         self.train()  # 切换为训练模式。
         return feature, feature_RAM  # 训练模式中 feature_RAM变量为空。
-
 
     def recon_criterion(self, input, target):
         return torch.mean(torch.abs(input - target))
@@ -1655,7 +1653,6 @@ class HICMD(nn.Module):
 
         return x_trans_all_set
 
-
     def sample_latent_interp(self, opt, data_sample, flag):
 
         self.eval()
@@ -2008,7 +2005,6 @@ class HICMD(nn.Module):
                     'id': self.id_optimizer.state_dict()}, opt_name)
 
 
-
     def resume(self, opt):
 
         if opt.resume_name == 'last':
@@ -2065,7 +2061,6 @@ class HICMD(nn.Module):
         return out
 
 
-
 def recover(inp):
     inp = inp.numpy().transpose((1, 2, 0))
     mean = np.array([0.485, 0.456, 0.406])
@@ -2098,7 +2093,6 @@ def to_gray(half=False): #simple
         return x
     return forward
 
-
 def assign_adain_params(adain_params, model):
     # assign the adain_params to the AdaIN layers in model
     for m in model.modules():
@@ -2109,7 +2103,6 @@ def assign_adain_params(adain_params, model):
             m.weight = std.contiguous().view(-1)
             if adain_params.size(1) > 2 * m.num_features:
                 adain_params = adain_params[:, 2 * m.num_features:] # remaining
-
 
 def get_num_adain_params(model):
     num_adain_params = 0
