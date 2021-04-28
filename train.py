@@ -123,7 +123,7 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。共进�
                     if epoch_cnt % opt.cnt_draw_plot == 0:
                         pp.draw_and_save_info(opt, epoch)
 
-                trainer.update_learning_rate(opt, phase) # Update learning rate
+                trainer.update_learning_rate(opt, phase) # Update learning rate，每一个batch都要更新learning rate.
 
                 if opt.test_exp:
                     break

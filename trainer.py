@@ -75,6 +75,7 @@ class HICMD(nn.Module):
         # Initialization of domain discriminator 域鉴别器。用于特征聚类用
         hyperparameters = get_config('market2duke.yaml')
         self.id_dis = IdDis(hyperparameters['gen']['id_dim'], hyperparameters['dis'], fp16=False)
+        id_dis_params = list(self.id_dis.parameters())
         #*****************************************************************************************
 
         #******Discriminator 鉴别器参数设置。****************************************************************
@@ -173,7 +174,7 @@ class HICMD(nn.Module):
 
         #******************Optimizer and scheduler***************************************
 
-        # 这里定义了优化器和调度器。
+        # 这里定义了优化器和调度器。这个id_optimizer，主要是为了优化HFL.
         self.id_optimizer = optim.SGD(all_params, weight_decay=opt.weight_decay_bb, momentum=opt.momentum,
                                       nesterov=opt.flag_nesterov)
         # 根据dis_params 设置 鉴别器的优化器和调度器                                      
@@ -186,13 +187,14 @@ class HICMD(nn.Module):
                                               weight_decay=opt.weight_decay_gen)
 
         #****Domain discriminator 的优化器***********added by sam.*********************
-        beta1 = hyperparameters['beta1']  # 0
-        beta2 = hyperparameters['beta2']  # 0.999
-        lr_id_d = hyperparameters['lr_id_d']  # 1e-5
-        id_dis_params = list(self.id_dis.parameters())
+        #beta1 = hyperparameters['beta1']  # 0
+        #beta2 = hyperparameters['beta2']  # 0.999
+        #lr_id_d = hyperparameters['lr_id_d']  # 1e-5
+        
+        # 使用和generator和discriminatoｒ一致的参数。
         self.id_dis_opt = torch.optim.Adam([p for p in id_dis_params if p.requires_grad],
-                                           lr=lr_id_d, betas=(beta1, beta2),
-                                           weight_decay=hyperparameters['weight_decay'])  # weight_decay: 0.0005
+                                           lr=opt.lr_dis, betas=(opt.beta1, opt.beta2),
+                                           weight_decay=opt.weight_decay_dis)  
         #*************************************************
 
 
@@ -202,10 +204,9 @@ class HICMD(nn.Module):
         self.dis_scheduler = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis, gamma=opt.gamma_dis)
         self.gen_scheduler = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen, gamma=opt.gamma_gen)
 
-        # 添加学习率  add by sam.
-        self.id_dis_scheduler = lr_scheduler.StepLR(self.id_dis_opt, step_size=hyperparameters['step_size'], gamma=hyperparameters['gamma'])
-        #self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters, opt)
-        #self.id_dis_scheduler.gamma = hyperparameters['gamma2']  # 0.1
+        # 添加domain　discriminator学习率  add by sam.
+        self.id_dis_scheduler = lr_scheduler.StepLR(self.id_dis_opt, step_size=opt.step_size_dis, gamma=opt.gamma_dis)
+
 
 
         # set GPU
@@ -224,6 +225,7 @@ class HICMD(nn.Module):
             self.etc_type['D_lr'] = self.dis_optimizer.param_groups[0]['lr']   # 优化器的 参数组。
             self.etc_type['G_lr'] = self.gen_optimizer.param_groups[0]['lr']   
             self.etc_type['ID_lr'] = self.id_optimizer.param_groups[0]['lr']
+            self.etc_type['Dom_lr'] = self.id_dis_opt.param_groups[0]['lr']  # added by sam 　　记录参数，用于显示和展示。
 
         self.edge = to_edge
         self.single = to_gray(False)
@@ -242,12 +244,12 @@ class HICMD(nn.Module):
         self.is_neg = True if len(neg) > 0 else False  # is_neq用来判断 是否存在有效的neg。  neg.shape = 1*4*3*256*128
 
         pos_all = pos[0]                            # pos_all:  维度8×3×256×128， 所以共计有8个分组。(the first and only element in pos)
-        pos_label_all = attribute_pos['order'][0]   # 维度 8维向量。  用图片所在文件夹名称 表示编号。
-        pos_cam_all = attribute_pos['cam'][0]       # 8维向量。
+        pos_label_all = attribute_pos['order'][0]   # 维度 8维向量。  用图片所在文件夹名称 表示编号。　ｅｇ:[111,111,111,111,19,19,19,19]
+        pos_cam_all = attribute_pos['cam'][0]       # 8维向量。[1,1,0,0,1,1,0,0]        
         pos_modal_all = attribute_pos['modal'][0]   # 8维向量。
         num_pos = pos_all.size(0)                   # num_pos = 8 .
 
-        pos_a1_idx = [x for x in range(num_pos) if x % 4 == 0]   # pos_a1_idx = [0 4]      # num_pos =8. range(num_pos): 0 1 2 3 4 5 6 7
+        pos_a1_idx = [x for x in range(num_pos) if x % 4 == 0]   # pos_a1_idx = [0 4] ,2张相同模态的图像，具有不同的编号     # num_pos =8. range(num_pos): 0 1 2 3 4 5 6 7
         pos_a2_idx = [x for x in range(num_pos) if x % 4 == 1]   # pos_a2_idx = [1,5]
         pos_b1_idx = [x for x in range(num_pos) if x % 4 == 2]   # pos_b1_idx = [2,6]
         pos_b2_idx = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7]
@@ -430,6 +432,7 @@ class HICMD(nn.Module):
         self.loss_id_dis_total.backward()    # domain discriminator loss backward.
         self.id_dis_opt.step()   # optimize the domain discriminator.
 
+        self.loss_type['D_domain'] = self.loss_id_dis_total.item()  # 存储损失函数
 
         # Set back.
         if self.case_a == 'RGB':
@@ -486,7 +489,7 @@ class HICMD(nn.Module):
         if Do_dis_update:
             # 始终是要执行这一部分。
             if self.zero_grad_D:  
-                self.dis_optimizer.zero_grad()   # 优化前，把梯度置零。
+                self.dis_optimizer.zero_grad()   # 优化前，把discriminaotr梯度置零。
                 self.zero_grad_D = False
 
             with torch.no_grad():
