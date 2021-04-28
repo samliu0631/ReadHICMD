@@ -71,21 +71,14 @@ class HICMD(nn.Module):
         self.cnt_batch_ID = 0
         opt.old_apply_pos_cnt = opt.apply_pos_cnt
 
-        # added by sam.
+        # added by sam.*************************************************************************
         # Initialization of domain discriminator 域鉴别器。用于特征聚类用
         hyperparameters = get_config('market2duke.yaml')
         self.id_dis = IdDis(hyperparameters['gen']['id_dim'], hyperparameters['dis'], fp16=False)
-        # 需要调整一下输入的维度。
-        beta1 = hyperparameters['beta1']  # 0
-        beta2 = hyperparameters['beta2']  # 0.999
-        lr_id_d = hyperparameters['lr_id_d']  # 1e-5
-        id_dis_params = list(self.id_dis.parameters())
-        self.id_dis_opt = torch.optim.Adam([p for p in id_dis_params if p.requires_grad],
-                                           lr=lr_id_d, betas=(beta1, beta2),
-                                           weight_decay=hyperparameters['weight_decay'])  # weight_decay: 0.0005
+        
         self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters, opt)
         self.id_dis_scheduler.gamma = hyperparameters['gamma2']  # 0.1
-
+        #*****************************************************************************************
 
         #******Discriminator 鉴别器参数设置。****************************************************************
         dis_params = []
@@ -194,6 +187,18 @@ class HICMD(nn.Module):
         self.gen_optimizer = torch.optim.Adam([p for p in gen_params if p.requires_grad],
                                               lr=opt.lr_gen, betas=(opt.beta1, opt.beta2),
                                               weight_decay=opt.weight_decay_gen)
+
+        #***************added by sam.*********************
+        # 需要调整一下输入的维度。
+        beta1 = hyperparameters['beta1']  # 0
+        beta2 = hyperparameters['beta2']  # 0.999
+        lr_id_d = hyperparameters['lr_id_d']  # 1e-5
+        id_dis_params = list(self.id_dis.parameters())
+        self.id_dis_opt = torch.optim.Adam([p for p in id_dis_params if p.requires_grad],
+                                           lr=lr_id_d, betas=(beta1, beta2),
+                                           weight_decay=hyperparameters['weight_decay'])  # weight_decay: 0.0005
+        #*************************************************
+
 
         #****************这里定义了学习率的参数。*******************************************************
 
@@ -2041,12 +2046,14 @@ class HICMD(nn.Module):
 
         torch.backends.cuda.cufft_plan_cache.clear()
 
+        #　加载
         self.id_scheduler = lr_scheduler.StepLR(self.id_optimizer, step_size=opt.step_size_bb, gamma=opt.gamma_bb, last_epoch=iterations)
         self.dis_scheduler = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis,
                                                  gamma=opt.gamma_dis, last_epoch=iterations)
         self.gen_scheduler = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen,
                                                  gamma=opt.gamma_gen, last_epoch=iterations)
 
+        # 这里应该也加上domain_dis的部分。否则
         print('=*'*50)
         print('Resume from iteration {}'.format(iterations))
         print('=*'*50)

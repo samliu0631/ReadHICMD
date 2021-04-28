@@ -211,29 +211,29 @@ def evaluate_regdb(distmat, q_pids, g_pids, max_rank=20):
     indices = np.argsort(distmat, axis=1)  #np.argsort ,按照由小到大排列，按行排序.　indices中记录的是元素编号。
     # 但实际上，
     matches = (g_pids[indices] == q_pids[:, np.newaxis]).astype(np.int32) # 010011011 <   q_pids[:, np.newaxis] 为变量增加一个维度。
-    # 这里g_pids[indices]　　每一行的含义是：　　当前行号对应的query图像，所有gallery图像的标签号（０－２０５）按照相似度由高到底排序。
+    # 这里g_pids[indices]　　每一行的含义是：　　当前行号对应的query图像，所有gallery图像(共有2060张)的标签号（０－２０５）按照相似度由高到底排序。
     # q_pids: query图像编号标签。　　g_pids:gallery　图像编号标签。
-    # g_pids[indices] == q_pids[:, np.newaxis] 表示的含义是所有query图像，算法正确匹配的ｂｏｏｌ矩阵。理想情况应该第一列全为１，其余全为０．
+    # g_pids[indices] == q_pids[:, np.newaxis] 表示的含义是所有query图像，算法正确匹配的ｂｏｏｌ矩阵。理想情况应该前10列全为１，其余全为０．
     # compute cmc curve for each query
     all_cmc = []
     all_AP = []
     num_valid_q = 0.  # number of valid query
 
     # only two cameras
-    q_camids = np.ones(num_q).astype(np.int32)   # 生成query图像ｉｄ。 indicated by "1"
-    g_camids = 2 * np.ones(num_g).astype(np.int32) # generate the id of gallery. indicated by "2"
+    q_camids = np.ones(num_q).astype(np.int32)   # 生成query图像ｉｄ。 indicated by "1"   RGB
+    g_camids = 2 * np.ones(num_g).astype(np.int32) # generate the id of gallery. indicated by "2"  IR
 
     for q_idx in range(num_q):  # iterate through all the query images.
         # get query pid and camid
-        q_pid = q_pids[q_idx]        # Get the image label of the current query image.
+        q_pid = q_pids[q_idx]        # Get the image label of the current query image.(0-2060)
         q_camid = q_camids[q_idx]    # Get the cam id of query image.
 
         # remove gallery samples that have the same pid and camid with query。实际上并没有这种情况。所以不用ｒｅｍｏｖｅ。
-        order = indices[q_idx]  # 获得当前query图像中，在gallery图像中按照识别分数由高到低，对应的ｇａｌｌｅｒｙ图像索引号（０－２０５９）。2060维度的向量。
-        remove = (g_pids[order] == q_pid) & (g_camids[order] == q_camid) # 
+        order = indices[q_idx]  # 当前query图像对应的：在gallery图像索引号(0-2060)，其中相似度按照由高到低排序。2060维度的向量。
+        remove = (g_pids[order] == q_pid) & (g_camids[order] == q_camid) # 去掉gallery中和query　图像文件夹编号和模态一致的情况。
         keep = np.invert(remove)
 
-        # compute cmc curve
+        # compute cmc curve　　raw_cmc中存储的是
         raw_cmc = matches[q_idx][keep]  # binary vector, positions with value 1 are correct matches
         # 提取当前query图像的匹配向量。（相对于２０６０个gallery图像。）
         if not np.any(raw_cmc):
@@ -243,14 +243,14 @@ def evaluate_regdb(distmat, q_pids, g_pids, max_rank=20):
         cmc = raw_cmc.cumsum()
         cmc[cmc > 1] = 1
 
-        all_cmc.append(cmc[:max_rank])
+        all_cmc.append(cmc[:max_rank])# 提取前100个结果。
         num_valid_q += 1.
 
         # compute average precision
         # reference: https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Average_precision
         num_rel = raw_cmc.sum()
         tmp_cmc = raw_cmc.cumsum()
-        tmp_cmc = [x / (i + 1.) for i, x in enumerate(tmp_cmc)]
+        tmp_cmc = [x / (i + 1.) for i, x in enumerate(tmp_cmc)] # 计算出 
         tmp_cmc = np.asarray(tmp_cmc) * raw_cmc
         AP = tmp_cmc.sum() / num_rel
         all_AP.append(AP)
@@ -261,7 +261,7 @@ def evaluate_regdb(distmat, q_pids, g_pids, max_rank=20):
     all_cmc = all_cmc.sum(0) / num_valid_q
     mAP = np.mean(all_AP)
 
-    return all_cmc, mAP
+    return all_cmc, mAP  # all_cmc 表示 每个query图像，前100个检测结果中是否有正确的值。
 
 #---------------------------------------# Function (load_network)
 def load_network(load_path, network):
