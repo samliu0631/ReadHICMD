@@ -76,8 +76,7 @@ class HICMD(nn.Module):
         hyperparameters = get_config('market2duke.yaml')
         self.id_dis = IdDis(hyperparameters['gen']['id_dim'], hyperparameters['dis'], fp16=False)
         
-        self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters, opt)
-        self.id_dis_scheduler.gamma = hyperparameters['gamma2']  # 0.1
+        
         #*****************************************************************************************
 
         #******Discriminator 鉴别器参数设置。****************************************************************
@@ -205,6 +204,10 @@ class HICMD(nn.Module):
         self.id_scheduler = lr_scheduler.StepLR(self.id_optimizer, step_size=opt.step_size_bb, gamma=opt.gamma_bb)
         self.dis_scheduler = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis, gamma=opt.gamma_dis)
         self.gen_scheduler = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen, gamma=opt.gamma_gen)
+
+        self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters, opt)
+        self.id_dis_scheduler.gamma = hyperparameters['gamma2']  # 0.1
+
 
         # set GPU
         if opt.use_gpu:

@@ -46,9 +46,9 @@ trainer.cnt_cumul = trainer.resume(opt) if len(opt.resume_name) > 0 else trainer
 pp = print_and_plot(opt)
 
 # 进行训练
-for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
+for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。共进行２５轮训练。
     print('=' * 40 + ' [ Epoch {}/{} ] '.format(epoch + 1, opt.num_epoch) + '=' * 40) # 打印====[Eoch 1/25]========
-    for phase in opt.phase_exp:                    # Each epoch has a training & validation & testing phase.
+    for phase in opt.phase_exp:                    # Each epoch has a training and testing phase.
         print('[{}] mode is processing..'.format(phase))
 
         if phase in [opt.phase_train, 'val']:      # val ：validation.
