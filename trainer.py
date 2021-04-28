@@ -28,21 +28,21 @@ def get_config(config):
     with open(config, 'r') as stream:
         return yaml.load(stream)
 
-def get_scheduler(optimizer, hyperparameters, opt, iterations=-1):
-    if 'lr_policy' not in hyperparameters or hyperparameters['lr_policy'] == 'constant':
-        scheduler = None # constant scheduler
-    elif hyperparameters['lr_policy'] == 'step':
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=hyperparameters['step_size'],
-                                        gamma=hyperparameters['gamma'], last_epoch=iterations)
-    elif hyperparameters['lr_policy'] == 'multistep':
-        #50000 -- 75000 --
-        #step = hyperparameters['step_size']
-        step = opt.step_size_dis
-        scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[step, step+step//2, step+step//2+step//4],
-                                        gamma=hyperparameters['gamma'], last_epoch=iterations)
-    else:
-        return NotImplementedError('learning rate policy [%s] is not implemented', hyperparameters['lr_policy'])
-    return scheduler
+# def get_scheduler(optimizer, hyperparameters, opt, iterations=-1):
+#     if 'lr_policy' not in hyperparameters or hyperparameters['lr_policy'] == 'constant':
+#         scheduler = None # constant scheduler
+#     elif hyperparameters['lr_policy'] == 'step':
+#         scheduler = lr_scheduler.StepLR(optimizer, step_size=hyperparameters['step_size'],
+#                                         gamma=hyperparameters['gamma'], last_epoch=iterations)
+#     elif hyperparameters['lr_policy'] == 'multistep':
+#         #50000 -- 75000 --
+#         #step = hyperparameters['step_size']
+#         step = opt.step_size_dis
+#         scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[step, step+step//2, step+step//2+step//4],
+#                                         gamma=hyperparameters['gamma'], last_epoch=iterations)
+#     else:
+#         return NotImplementedError('learning rate policy [%s] is not implemented', hyperparameters['lr_policy'])
+#     return scheduler
 
 class HICMD(nn.Module):
     # 所有的神经网络模型都要继承 nn.Module.

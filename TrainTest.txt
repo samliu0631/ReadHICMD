@@ -1,5 +1,7 @@
 --data_name RegDB_01 --flag_exp 1 --test_only True --test_dir ./pretrained/ --test_name last --resume_dir ./pretrained/checkpoints/ --resume_name last
 
+// 从预训练的数据中读取模型，然后继续进行训练。
+--data_name RegDB_01 --name_output train --flag_exp 1  --resume_dir ./pretrained/checkpoints/ --resume_name last
 
 --data_name RegDB_01 --name_output train --flag_exp 1
 

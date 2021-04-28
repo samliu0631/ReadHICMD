@@ -19,7 +19,7 @@ parser.add_argument('--flag_exp', default=1, type=int, help='1: original(1~2days
 parser.add_argument('--data_name',default='RegDB_01',type=str, help='RegDB_01 ~ RegDB_10 / SYSU')
 parser.add_argument('--data_dir',default='./data/',type=str, help='data dir: e.g. ./data/')
 parser.add_argument('--name_output',default='test', type=str, help='output name')
-parser.add_argument('--test_only', default=False, type=bool, help='True / False')
+parser.add_argument('--test_only', default=False, type=bool, help='True / False')           # 设置是否只进行训练。
 parser.add_argument('--test_dir', default='./model/RegDB_01/test/', type=str, help='test_dir: e.g. ./path/')
 parser.add_argument('--test_name', default='last', type=str, help='name of test: e.g. last')
 parser.add_argument('--resume_dir', default='./model/RegDB_01/test/checkpoints/', type=str, help='resume_dir: e.g. ./path/checkpoints/')

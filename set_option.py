@@ -165,7 +165,7 @@ def opt_model(opt):
     opt.D_norm = 'none'  # normalization layer [none/bn/in/ln]
     opt.D_act = 'lrelu'  # activation function [relu/lrelu/prelu/selu/tanh]
     opt.D_w_lrelu = opt.w_lrelu
-    opt.D_gan_type = 'lsgan'  # GAN loss [lsgan/nsgan]
+    opt.D_gan_type = 'lsgan'  # GAN loss [lsgan/nsgan]  
     opt.D_n_scale = 3  # number of scales
     opt.D_pad_type = 'reflect'  # padding type [zero/reflect]
     opt.D_non_local = 0

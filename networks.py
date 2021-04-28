@@ -117,9 +117,9 @@ class Discriminator(nn.Module):
         # 这部分的损失函数
         if self.LAMBDA > 0:
             input_real.requires_grad_()
-        outs0 = self.forward(input_fake)
-        outs1 = self.forward(input_real)
-        loss = 0
+        outs0 = self.forward(input_fake)  # fake图像映射为0.
+        outs1 = self.forward(input_real)  # real图像映射为1.
+        loss = 0 
         reg = 0
         Drift = 0.001
         LAMBDA = self.LAMBDA
@@ -140,6 +140,7 @@ class Discriminator(nn.Module):
 
         for it, (out0, out1) in enumerate(zip(outs0, outs1)):
             if self.gan_type == 'lsgan':
+                # 作者使用的是：'lsgan'
                 loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2)
                 if self.LAMBDA > 0:
                     reg += LAMBDA* self.compute_grad2(out1, input_real).mean()
@@ -167,7 +168,7 @@ class Discriminator(nn.Module):
 
         for it, (out0) in enumerate(outs0):
             if self.gan_type == 'lsgan':
-                loss += torch.mean((out0 - 1)**2) # LSGAN
+                loss += torch.mean((out0 - 1)**2) # LSGAN   # 目的就是把fake图像映射为1(真实图像对应的标签。)
             elif self.gan_type == 'nsgan':
                 all1 = Variable(torch.ones_like(out0.data).cuda(), requires_grad=False)
                 loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all1))
