@@ -71,12 +71,10 @@ class HICMD(nn.Module):
         self.cnt_batch_ID = 0
         opt.old_apply_pos_cnt = opt.apply_pos_cnt
 
-        # added by sam.*************************************************************************
+        # **** Domain discriminator. added by sam.*****************************************************
         # Initialization of domain discriminator 域鉴别器。用于特征聚类用
         hyperparameters = get_config('market2duke.yaml')
         self.id_dis = IdDis(hyperparameters['gen']['id_dim'], hyperparameters['dis'], fp16=False)
-        
-        
         #*****************************************************************************************
 
         #******Discriminator 鉴别器参数设置。****************************************************************
@@ -187,8 +185,7 @@ class HICMD(nn.Module):
                                               lr=opt.lr_gen, betas=(opt.beta1, opt.beta2),
                                               weight_decay=opt.weight_decay_gen)
 
-        #***************added by sam.*********************
-        # 需要调整一下输入的维度。
+        #****Domain discriminator 的优化器***********added by sam.*********************
         beta1 = hyperparameters['beta1']  # 0
         beta2 = hyperparameters['beta2']  # 0.999
         lr_id_d = hyperparameters['lr_id_d']  # 1e-5
@@ -205,8 +202,10 @@ class HICMD(nn.Module):
         self.dis_scheduler = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis, gamma=opt.gamma_dis)
         self.gen_scheduler = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen, gamma=opt.gamma_gen)
 
-        self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters, opt)
-        self.id_dis_scheduler.gamma = hyperparameters['gamma2']  # 0.1
+        # 添加学习率  add by sam.
+        self.id_dis_scheduler = lr_scheduler.StepLR(self.id_dis_opt, step_size=hyperparameters['step_size'], gamma=hyperparameters['gamma'])
+        #self.id_dis_scheduler = get_scheduler(self.id_dis_opt, hyperparameters, opt)
+        #self.id_dis_scheduler.gamma = hyperparameters['gamma2']  # 0.1
 
 
         # set GPU
@@ -1806,6 +1805,7 @@ class HICMD(nn.Module):
         return x_trans_all_set
 
     def update_learning_rate(self, opt, phase):
+    # 在训练过程，所有的模块的学习率是同步更新的。
 
         if phase == opt.phase_train:  ## Training phase
             if self.id_scheduler is not None:
@@ -1814,10 +1814,15 @@ class HICMD(nn.Module):
                 self.dis_scheduler.step()
             if self.gen_scheduler is not None:
                 self.gen_scheduler.step()
+            if self.id_dis_scheduler is not None:
+                self.id_dis_scheduler.step()
 
             self.etc_type['D_lr'] = self.dis_optimizer.param_groups[0]['lr']
             self.etc_type['G_lr'] = self.gen_optimizer.param_groups[0]['lr']
             self.etc_type['ID_lr'] = self.id_optimizer.param_groups[0]['lr']
+            self.etc_type['Dom_lr'] = self.id_dis_opt.param_groups[0]['lr']  # added by sam .
+
+
 
     ##########################################################################################################
     # Data prosessing
