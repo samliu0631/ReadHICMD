@@ -75,7 +75,7 @@ class IdDis(nn.Module):
         inputs = torch.cat((input_s, input_t), dim=0)  
         outs = self.forward(inputs)   # 只能进行一次forward。
         outs0 = outs[0:2]
-        outs1 = outs[2:4]
+        outs1 = outs[2:4]  # 这里边把输入数量确定了，可能存在问题。后期需要修改以下。
 
         loss = 0
         reg = 0.0

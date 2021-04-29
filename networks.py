@@ -37,7 +37,7 @@ class Discriminator(nn.Module):
 
         self.non_local = opt.D_non_local
         self.n_res = opt.D_n_res
-        self.LAMBDA = opt.D_LAMBDA
+        self.LAMBDA = opt.D_LAMBDA  # 0.01
         init = opt.D_init
 
         self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)

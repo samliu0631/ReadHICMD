@@ -203,6 +203,8 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。共进�
                     with torch.no_grad():
                         feat_tsne, _ = extract_feature(opt, trainer, dataloaders_train_tsne, 'train_tsne',
                                                        data_info['train_tsne_modal'], data_info['train_tsne_cam'])
+
+                                                       
                 for k in range(len(result)):
                     result_k = result[k]
                     save_path = save_test_features(opt, epoch_cnt, result_k, result_RAM, result_multi, k)

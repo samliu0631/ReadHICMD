@@ -550,7 +550,8 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
 
     features_all = []
     features_RAM_all = []
-
+    #features_all_unorm = []
+    result_dom_pre  = []
     for cnt, data in enumerate(dataloaders):  # Iterate over data.
         img, label = data  # 测试过程的一个batch 是64 张图像。
         b, c, h, w = img.size()
@@ -581,6 +582,21 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
                     for k in range(len(feature)):
                         ff_all[k] += feature[k]
 
+                # Apply domain discriminator 
+                if cnt_first == 1:
+                    out = trainer.id_dis.forward(feature[0])   # 这里执行了两次，需要调整以下。
+                    out_array = out.cpu().numpy()
+
+                    for i in range(len(out_array)):
+                        cur_out = out_array[i]
+                        if cur_out > 0.5:
+                            dom_pre =1
+                        else:
+                            dom_pre =0
+                        result_dom_pre +=[dom_pre] 
+
+        
+
 
         # norm feature
         if opt.test_norm:
@@ -599,8 +615,10 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
             for k in range(len(ff_all)):
                 if opt.test_gpu:
                     features_all += [torch.FloatTensor().cuda()]
+                    #features_all_unorm += [torch.FloatTensor().cuda()]  # added by sam
                 else:
                     features_all += [torch.FloatTensor()]
+                    #features_all_unorm += [torch.FloatTensor()]  # added by sam.
 
             if opt.test_RAM:
                 for k in range(len(feature_RAM)):
@@ -612,8 +630,10 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
         for k in range(len(ff_all)):
             if opt.test_gpu:
                 features_all[k] = torch.cat((features_all[k],ff_all[k].data), 0)
+                #features_all_unorm[k] = torch.cat((features_all_unorm[k],ff_all_tmp[k].data), 0)  # added by sam.
             else:
                 features_all[k] = torch.cat((features_all[k],ff_all[k].data.cpu()), 0)
+                #features_all_unorm[k] = torch.cat((features_all_unorm[k],ff_all_tmp[k].data.cpu()), 0)  # added by sam.
 
         if opt.test_RAM:
             for k in range(len(feature_RAM)):
@@ -626,7 +646,7 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
         # print(features.shape)
 
 
-    return features_all, features_RAM_all
+    return features_all, features_RAM_all,result_dom_pre   #,features_all_unorm # 增加没有norm的特征，用来计算鉴别器的鉴别准确率。
 
 
 def evaluate_result(opt, epoch, result, result_RAM, result_multi, save_path, k):
@@ -843,10 +863,29 @@ def extract_test_features(opt, trainer, dataloaders, data_info):
         trainer = trainer.eval()
 
     with torch.no_grad():
-        gallery_feature, gallery_feature_raw = \
+        # add unorm feature to test the performance of domain discriminator.
+        gallery_feature, gallery_feature_raw ,gallery_dom_pre = \
             extract_feature(opt, trainer, dataloaders['gallery'],'gallery', data_info['gallery_modal'], data_info['gallery_cam'])
-        query_feature, query_feature_raw = \
+        counter =0  # domain discriminaotr RGB 记为0. IR 记为1.
+        for i in range(len(gallery_dom_pre)):
+            cur_dom_pre= gallery_dom_pre[i]
+            if cur_dom_pre==1 :
+                counter = counter+1
+        dom_precision = counter/len(gallery_dom_pre) *100
+        print("gallery dom_precision={}".format(dom_precision))
+
+        query_feature, query_feature_raw ,query_dom_pre     = \
             extract_feature(opt, trainer, dataloaders['query'], 'query', data_info['query_modal'], data_info['query_cam'])
+
+        counter =0  # domain discriminaotr RGB 记为0. IR 记为1.
+        for i in range(len(query_dom_pre)):
+            cur_dom_pre= query_dom_pre[i]
+            if cur_dom_pre==0 :
+                counter = counter+1
+        dom_precision = counter/len(query_dom_pre) *100
+        print("query dom_precision={}".format(dom_precision))
+
+
         if opt.test_multi:
             mquery_feature, _ = extract_feature(opt, trainer, dataloaders['multi-query'], 'mquery', data_info['query_modal'], data_info['query_cam'])
 
@@ -867,7 +906,7 @@ def extract_test_features(opt, trainer, dataloaders, data_info):
             result_multi += [{'mquery_f': mquery_feature[k].numpy(), 'mquery_label': data_info['mquery_label'],
                             'mquery_cam': data_info['mquery_cam']}]
 
-    return result, result_RAM, result_multi
+    return result, result_RAM, result_multi # 测试的时候，只有result变量非空。 其余变量均为空。
 
 def save_test_features(opt, epoch, result, result_RAM, result_multi, k):
     if not os.path.isdir(os.path.join(opt.save_dir, 'test_results')):
