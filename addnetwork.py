@@ -69,10 +69,15 @@ class IdDis(nn.Module):
 
     def calc_dis_loss_ab(self, input_s, input_t):
         # input_s: RGB, input_t:IR.
-        outs0 = self.forward(input_s)  # RGB  认为是真实编码，记为0.
-        outs1 = self.forward(input_t)  # IR   认为是虚假编码，记为1.
-        loss = 0
+        # outs0 = self.forward(input_s)  # RGB  认为是真实编码，记为0.
+        # outs1 = self.forward(input_t)  # IR   认为是虚假编码，记为1.
 
+        inputs = torch.cat((input_s, input_t), dim=0)
+        outs = self.forward(inputs)
+        outs0 = outs[0:2]
+        outs1 = outs[2:4]
+
+        loss = 0
         reg = 0.0
         for it, (out0, out1) in enumerate(zip(outs0, outs1)): # 因为1个batch有多张图像，所以要逐个计算。
             if self.gan_type == 'lsgan':

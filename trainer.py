@@ -1057,10 +1057,11 @@ class HICMD(nn.Module):
             self.etc_type['Trip_nscore'] = nscore_all / loss_cnt
             self.loss_type['TRIP'] = self.loss_trip.item() if self.loss_trip != 0 else 0
 
-            # Added by sam.
-            # ID domain adversarial loss
-            self.loss_gen_id_adv = self.id_dis.calc_gen_loss(f_all_domain_adv)
-            self.loss_type['ID_ADV'] = self.loss_gen_id_adv.item() if self.loss_gen_id_adv != 0 else 0
+            
+            # ID domain adversarial loss  # Added by sam.
+            #self.loss_gen_id_adv = self.id_dis.calc_gen_loss(f_all_domain_adv)
+            #self.loss_type['ID_ADV'] = self.loss_gen_id_adv.item() if self.loss_gen_id_adv != 0 else 0
+            self.loss_gen_id_adv = 0
             # 对目标域（IR域）,和包含IR域产生的原型编码 或 风格属性编码的 特征编码 计算域鉴别对抗损失函数。
             # 这个损失函数定义的目标是，使得生成器生成的 最终特征编码 接近 RGB域的特征编码，无论是IR域产生的特征编码，还是包含IR域的混合特征编码。
             # 而域鉴别器的目标就是 把RGB的特征编码，和其他类别的鉴别出来。
