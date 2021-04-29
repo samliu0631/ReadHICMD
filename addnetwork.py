@@ -72,8 +72,8 @@ class IdDis(nn.Module):
         # outs0 = self.forward(input_s)  # RGB  认为是真实编码，记为0.
         # outs1 = self.forward(input_t)  # IR   认为是虚假编码，记为1.
 
-        inputs = torch.cat((input_s, input_t), dim=0)
-        outs = self.forward(inputs)
+        inputs = torch.cat((input_s, input_t), dim=0)  
+        outs = self.forward(inputs)   # 只能进行一次forward。
         outs0 = outs[0:2]
         outs1 = outs[2:4]
 

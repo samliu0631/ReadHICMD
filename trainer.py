@@ -341,9 +341,9 @@ class HICMD(nn.Module):
             self.cams_b = cams_b1
             self.case_a = case_a1        # 'RGB'
             self.case_b = case_b1        # 'IR'
-            self.dis_update(x_a1, x_b1, opt, phase)                 # x_a1  x_b1都是2张图片。
+            #self.dis_update(x_a1, x_b1, opt, phase)                 # x_a1  x_b1都是2张图片。
             self.domain_dis_update(x_a1, x_b1, opt, phase)  # update the domain discriminator.
-            self.gen_update(x_a1, x_b1, neg_a, neg_b, opt, phase)   # 对整个模型进行更新。
+            #self.gen_update(x_a1, x_b1, neg_a, neg_b, opt, phase)   # 对整个模型进行更新。
 
 
         # 存储损失函数结果。
@@ -436,19 +436,15 @@ class HICMD(nn.Module):
 
         # Set back.
         if self.case_a == 'RGB':
-            self.dis_RGB = self.dis_a
             self.gen_RGB = self.gen_a
         elif self.case_a == 'IR':
-            self.dis_IR = self.dis_a
             self.gen_IR = self.gen_a
         else:
             assert(False)
 
         if self.case_b == 'RGB':
-            self.dis_RGB = self.dis_b
             self.gen_RGB = self.gen_b
         elif self.case_b == 'IR':
-            self.dis_IR = self.dis_b
             self.gen_IR = self.gen_b
         else:
             assert(False)
@@ -1812,12 +1808,12 @@ class HICMD(nn.Module):
     # 在训练过程，所有的模块的学习率是同步更新的。
 
         if phase == opt.phase_train:  ## Training phase
-            if self.id_scheduler is not None:
-                self.id_scheduler.step()
-            if self.dis_scheduler is not None:
-                self.dis_scheduler.step()
-            if self.gen_scheduler is not None:
-                self.gen_scheduler.step()
+            # if self.id_scheduler is not None:
+            #     self.id_scheduler.step()
+            # if self.dis_scheduler is not None:
+            #     self.dis_scheduler.step()
+            # if self.gen_scheduler is not None:
+            #     self.gen_scheduler.step()
             if self.id_dis_scheduler is not None:
                 self.id_dis_scheduler.step()
 
@@ -2010,16 +2006,20 @@ class HICMD(nn.Module):
         dis_name = os.path.join(opt.save_dir, 'checkpoints', 'dis_{}.pt'.format(str(self.cnt_cumul).zfill(7)))
         id_name = os.path.join(opt.save_dir, 'checkpoints', 'id_{}.pt'.format(str(self.cnt_cumul).zfill(7)))
         opt_name = os.path.join(opt.save_dir, 'checkpoints', 'optimizer.pt')
+        # 增加domain discriminator 的存储路径。
+        dom_dis_name = os.path.join(opt.save_dir, 'checkpoints','dom_{}.pt'.format(str(self.cnt_cumul).zfill(7)))  # added by sam 
 
         torch.save({'a': self.gen_RGB.state_dict(), 'b': self.gen_IR.state_dict()}, gen_name)
         torch.save({'a': self.dis_RGB.state_dict(), 'b': self.dis_IR.state_dict()}, dis_name)
+        torch.save({'dom': self.id_dis.state_dict()}, dom_dis_name)  # added by sam,  store the domain discriminator model.
+
         id_dict = {'id': self.id_classifier.state_dict()}
         id_dict['backbone_pro'] = self.backbone_pro.state_dict()
         id_dict['combine_weight'] = self.combine_weight.state_dict()
 
         torch.save(id_dict, id_name)
         torch.save({'gen': self.gen_optimizer.state_dict(), 'dis': self.dis_optimizer.state_dict(), \
-                    'id': self.id_optimizer.state_dict()}, opt_name)
+                    'id': self.id_optimizer.state_dict(),   'dom': self.id_dis_opt.state_dict()}, opt_name)  # modified by sam ,store the domain dis optimizer.
 
 
     def resume(self, opt):
@@ -2050,22 +2050,94 @@ class HICMD(nn.Module):
         self.dis_RGB.load_state_dict(state_dict['a'])
         self.dis_IR.load_state_dict(state_dict['b'])
 
+        # load domain discriminator parameters. added by sam.*******************************
+        # if opt.resume_name == 'last':
+        #     model_name = get_model_list(opt.resume_dir, 'dom')
+        # else:
+        #     model_name = os.path.join(opt.resume_dir, 'dom_{}.pt'.format(opt.resume_name.zfill(7)))
+        # state_dict = torch.load(model_name)
+        # self.id_dis.load_state_dict(state_dict['dom'])
+        #***********************************************************************************
+
+
         # Load optimizers
         state_dict = torch.load(os.path.join(opt.resume_dir, 'optimizer.pt'))
         self.id_optimizer.load_state_dict(state_dict['id'])
         self.gen_optimizer.load_state_dict(state_dict['gen'])
         self.dis_optimizer.load_state_dict(state_dict['dis'])
+        # self.id_dis_opt.load_state_dict(state_dict['dom'])  # added by sam. Resume the domain discriminator optimizer.
 
         torch.backends.cuda.cufft_plan_cache.clear()
 
-        #　加载
-        self.id_scheduler = lr_scheduler.StepLR(self.id_optimizer, step_size=opt.step_size_bb, gamma=opt.gamma_bb, last_epoch=iterations)
-        self.dis_scheduler = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis,
+        #　设置学习率。
+        self.id_scheduler     = lr_scheduler.StepLR(self.id_optimizer, step_size=opt.step_size_bb, gamma=opt.gamma_bb, last_epoch=iterations)
+        self.dis_scheduler    = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis,
                                                  gamma=opt.gamma_dis, last_epoch=iterations)
-        self.gen_scheduler = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen,
+        self.gen_scheduler    = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen,
                                                  gamma=opt.gamma_gen, last_epoch=iterations)
+        # self.id_dis_scheduler = lr_scheduler.StepLR(self.id_dis_opt, step_size=opt.step_size_dis, gamma=opt.gamma_dis, last_epoch=iterations) # added by sam.
+        
+        print('=*'*50)
+        print('Resume from iteration {}'.format(iterations))
+        print('=*'*50)
 
-        # 这里应该也加上domain_dis的部分。否则
+        return iterations
+
+    def resumefromResultWithDomdis(self, opt):
+
+        if opt.resume_name == 'last':
+            model_name = get_model_list(opt.resume_dir, "id")
+        else:
+            model_name = os.path.join(opt.resume_dir, 'id_{}.pt'.format(opt.resume_name.zfill(7)))
+        state_dict = torch.load(model_name)
+        iterations = int(model_name[-10:-3])
+        self.id_classifier.load_state_dict(state_dict['id'])
+        self.backbone_pro.load_state_dict(state_dict['backbone_pro'])
+        self.combine_weight.load_state_dict(state_dict['combine_weight'])
+
+        if opt.resume_name == 'last':
+            model_name = get_model_list(opt.resume_dir, 'gen')
+        else:
+            model_name = os.path.join(opt.resume_dir, 'gen_{}.pt'.format(opt.resume_name.zfill(7)))
+        state_dict = torch.load(model_name)
+        self.gen_RGB.load_state_dict(state_dict['a'])
+        self.gen_IR.load_state_dict(state_dict['b'])
+
+        if opt.resume_name == 'last':
+            model_name = get_model_list(opt.resume_dir, 'dis')
+        else:
+            model_name = os.path.join(opt.resume_dir, 'dis_{}.pt'.format(opt.resume_name.zfill(7)))
+        state_dict = torch.load(model_name)
+        self.dis_RGB.load_state_dict(state_dict['a'])
+        self.dis_IR.load_state_dict(state_dict['b'])
+
+        # load domain discriminator parameters. added by sam.*******************************
+        if opt.resume_name == 'last':
+            model_name = get_model_list(opt.resume_dir, 'dom')
+        else:
+            model_name = os.path.join(opt.resume_dir, 'dom_{}.pt'.format(opt.resume_name.zfill(7)))
+        state_dict = torch.load(model_name)
+        self.id_dis.load_state_dict(state_dict['dom'])
+        #***********************************************************************************
+
+
+        # Load optimizers
+        state_dict = torch.load(os.path.join(opt.resume_dir, 'optimizer.pt'))
+        self.id_optimizer.load_state_dict(state_dict['id'])
+        self.gen_optimizer.load_state_dict(state_dict['gen'])
+        self.dis_optimizer.load_state_dict(state_dict['dis'])
+        self.id_dis_opt.load_state_dict(state_dict['dom'])  # added by sam. Resume the domain discriminator optimizer.
+
+        torch.backends.cuda.cufft_plan_cache.clear()
+
+        #　设置学习率。
+        self.id_scheduler     = lr_scheduler.StepLR(self.id_optimizer, step_size=opt.step_size_bb, gamma=opt.gamma_bb, last_epoch=iterations)
+        self.dis_scheduler    = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis,
+                                                 gamma=opt.gamma_dis, last_epoch=iterations)
+        self.gen_scheduler    = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen,
+                                                 gamma=opt.gamma_gen, last_epoch=iterations)
+        self.id_dis_scheduler = lr_scheduler.StepLR(self.id_dis_opt, step_size=opt.step_size_dis, gamma=opt.gamma_dis, last_epoch=iterations) # added by sam.
+        
         print('=*'*50)
         print('Resume from iteration {}'.format(iterations))
         print('=*'*50)

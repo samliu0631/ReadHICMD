@@ -42,7 +42,8 @@ opt = opt_test_settings(opt)
 
 # 训练网络初始化
 trainer = HICMD(opt) # Initial the trainer
-trainer.cnt_cumul = trainer.resume(opt) if len(opt.resume_name) > 0 else trainer.cnt_cumul   # 这里相当于三目运算。
+#trainer.cnt_cumul = trainer.resume(opt) if len(opt.resume_name) > 0 else trainer.cnt_cumul   # 这里相当于三目运算。
+trainer.cnt_cumul = trainer.resumefromResultWithDomdis(opt) if len(opt.resume_name) > 0 else trainer.cnt_cumul   # 这里相当于三目运算。
 pp = print_and_plot(opt)
 
 # 进行训练
@@ -114,6 +115,8 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。共进�
                 if phase in opt.phase_train:                      # 判断是否位于训练阶段
                     if epoch_cnt % opt.cnt_save_modal == 0:       # 如果累计训练达到5000次，进行一次存储。
                         trainer.save(opt, epoch)
+                    # if epoch_cnt % 100 == 0:       # 如果累计训练达到5000次，进行一次存储。
+                    #     trainer.save(opt, epoch)    
                     #if epoch_cnt % 1000 == 0:
                         #torch.save(trainer.state_dict(), './pretrained/new/RegDB_01.pkl')
                         #torch.save(trainer.state_dict(), './pretrained/new/SYSU.pkl')
@@ -132,6 +135,8 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。共进�
                 if epoch_cnt % opt.test_cnt == 0:
                     trainer.eval()  # Set model to evaluate mode
                     result, result_RAM, result_multi = extract_test_features(opt, trainer, dataloaders, data_info)
+
+
                     if opt.test_tsne:
                         with torch.no_grad():
                             feat_tsne, _ = extract_feature(opt, trainer, dataloaders_train_tsne, 'train_tsne',
