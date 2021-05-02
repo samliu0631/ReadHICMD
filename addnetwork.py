@@ -69,13 +69,13 @@ class IdDis(nn.Module):
 
     def calc_dis_loss_ab(self, input_s, input_t):
         # input_s: RGB, input_t:IR.
-        # outs0 = self.forward(input_s)  # RGB  认为是真实编码，记为0.
-        # outs1 = self.forward(input_t)  # IR   认为是虚假编码，记为1.
+        outs0 = self.forward(input_s)  # RGB  认为是真实编码，记为0.
+        outs1 = self.forward(input_t)  # IR   认为是虚假编码，记为1.
 
-        inputs = torch.cat((input_s, input_t), dim=0)  
-        outs = self.forward(inputs)   # 只能进行一次forward。
-        outs0 = outs[0:2]
-        outs1 = outs[2:4]  # 这里边把输入数量确定了，可能存在问题。后期需要修改以下。
+        #inputs = torch.cat((input_s, input_t), dim=0)  
+        #outs = self.forward(inputs)   # 只能进行一次forward。
+        #outs0 = outs[0:2]
+        #outs1 = outs[2:4]  # 这里边把输入数量确定了，可能存在问题。后期需要修改以下。
 
         loss = 0
         reg = 0.0

@@ -42,8 +42,8 @@ opt = opt_test_settings(opt)
 
 # 训练网络初始化
 trainer = HICMD(opt) # Initial the trainer
-#trainer.cnt_cumul = trainer.resume(opt) if len(opt.resume_name) > 0 else trainer.cnt_cumul   # 这里相当于三目运算。
-trainer.cnt_cumul = trainer.resumefromResultWithDomdis(opt) if len(opt.resume_name) > 0 else trainer.cnt_cumul   # 这里相当于三目运算。
+trainer.cnt_cumul = trainer.resume(opt) if len(opt.resume_name) > 0 else trainer.cnt_cumul   # 这里相当于三目运算。
+#trainer.cnt_cumul = trainer.resumefromResultWithDomdis(opt) if len(opt.resume_name) > 0 else trainer.cnt_cumul   # 这里相当于三目运算。
 pp = print_and_plot(opt)
 
 # 进行训练
@@ -204,7 +204,7 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。共进�
                         feat_tsne, _ = extract_feature(opt, trainer, dataloaders_train_tsne, 'train_tsne',
                                                        data_info['train_tsne_modal'], data_info['train_tsne_cam'])
 
-                                                       
+
                 for k in range(len(result)):
                     result_k = result[k]
                     save_path = save_test_features(opt, epoch_cnt, result_k, result_RAM, result_multi, k)
