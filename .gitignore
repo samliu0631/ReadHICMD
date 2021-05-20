@@ -1,0 +1,8 @@
+data/
+eval_SYSU/
+log/
+model/
+pretrained/
+.idea/
+.vscode/
+__pycache__/
