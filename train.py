@@ -11,6 +11,8 @@ from data_sampler import *
 from reIDmodel_others import *
 from trainer import HICMD
 from collections import namedtuple
+
+from HicmdPP import * # added by sam.
 version =  torch.__version__
 
 # 输入参数的定义
@@ -40,6 +42,13 @@ opt = opt_settings(opt)
 # 这里已经产生了dataloaders了。
 dataloaders, dataloaders_train_tsne, old_train_dataloader, data_info, data_sample, opt = data_settings(opt)
 opt = opt_test_settings(opt)
+
+
+# 写一个新的dataloader，能够加载sysu的数据。
+
+
+# 根据已有模型，产生伪标签。
+
 
 # 训练网络初始化
 trainer = HICMD(opt) # Initial the trainer
