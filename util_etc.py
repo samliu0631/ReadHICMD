@@ -249,10 +249,8 @@ def data_settings(opt):
     transform_train_list = []  # List used to store the different class instances for training.
     transform_train_list = transform_train_list + [transforms.Resize((opt.h,opt.w), interpolation=3)]  # 图像要插值成为256×128大小的图像。
     transform_train_list = transform_train_list + [transforms.Pad(opt.pad)] if opt.pad > 0 else transform_train_list  # opt.pad=0,所以不进行图像填充。
-    transform_train_list = transform_train_list + [transforms.RandomCrop((opt.h,opt.w))] if opt.pad > 0 else transform_train_list  # 控制随机裁剪图片。
-    #  这里因为opt.pad=0，所以并不进行设置。
-    transform_train_list = transform_train_list + [transforms.RandomHorizontalFlip()] if opt.flip else transform_train_list
-    # 控制随机水平翻转
+    transform_train_list = transform_train_list + [transforms.RandomCrop((opt.h,opt.w))] if opt.pad > 0 else transform_train_list  # 控制随机裁剪图片。#  这里因为opt.pad=0，所以并不进行设置。
+    transform_train_list = transform_train_list + [transforms.RandomHorizontalFlip()] if opt.flip else transform_train_list# 控制随机水平翻转
     transform_train_list = transform_train_list + [transforms.ToTensor()]  # 将数据转换为tensor，并归一化至【0,1】范围内。
     transform_train_list = transform_train_list + [transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
 
@@ -268,8 +266,8 @@ def data_settings(opt):
 
 
     # 将'train_all', 'gallery', 'query'三类数据集合的 transform属性存储在一个字典数据结构data_transforms 中。
-    data_transforms = {}  # Initial dict.
-    for x in opt.phase_data:    # 'train_all', 'gallery', 'query'
+    data_transforms = {}            # Initial dict.
+    for x in opt.phase_data:        # 'train_all', 'gallery', 'query'
         if x == opt.phase_train:    # if x == 'train_all'
             data_transforms[x] = transforms.Compose(transform_train_list)  # initial the class transforms.Compose and form instance.
         else:
@@ -287,7 +285,7 @@ def data_settings(opt):
     cnt = 0
     for i in range(   len(  image_datasets_train_tsne.targets  )   ):  # 4120表示所有的图像个数。
         if image_datasets_train_tsne.targets[i] < opt.test_tsne_num:   # opt.test_tsne_num = 15.
-            cnt += 1   # 记录train_all文件夹中前15个子文件夹的图像数量。 共计300个。
+            cnt += 1                            # 记录train_all文件夹中前15个子文件夹的图像数量。 共计300个。
     sampler = DummySampler(image_datasets_train_tsne)  # dummy 仿制品，假的。  dummysampler模拟采样器。
     sampler.num_samples = cnt  # 设置采样数量。
     # sampler.num_samples = len(image_datasets_train_tsne.targets)
@@ -306,7 +304,7 @@ def data_settings(opt):
     train_modal_all = data_info['train_tsne_modal']   # all model for trained images.
     train_cam_all = data_info['train_tsne_cam']       # all cam for trained images.
     # 对data_info进行裁剪，只保留前300个图像对应的数据。  cnt=300.
-    data_info['train_tsne_cam'] = data_info['train_tsne_cam'][:cnt]
+    data_info['train_tsne_cam']   = data_info['train_tsne_cam'][:cnt]
     data_info['train_tsne_label'] = data_info['train_tsne_label'][:cnt]
     data_info['train_tsne_modal'] = data_info['train_tsne_modal'][:cnt]
 

@@ -12,7 +12,10 @@ from reIDmodel_others import *
 from trainer import HICMD
 from collections import namedtuple
 
+
 from HicmdPP import * # added by sam.
+from util_pseudo import * # added by sam.
+
 version =  torch.__version__
 
 
@@ -46,18 +49,64 @@ parser.add_argument('--resume_name', default='', type=str, help='name of resume:
 opt = parser.parse_args()  # parse the input arguments.
 
 # 参数初始化
-opt = opt_model(opt)  # Set the default parameters
-np.random.seed(opt.random_seed) # Set the seed number of random algorithm
-torch.manual_seed(opt.random_seed)  # 设置 (CPU) 生成随机数的种子.  目的是为了每次实验产生的随机数是一样的，有利于实验结果的比对。
+opt = opt_model(opt)                         # Set the default parameters
+np.random.seed(opt.random_seed)              # Set the seed number of random algorithm
+torch.manual_seed(opt.random_seed)           # 设置 (CPU) 生成随机数的种子.  目的是为了每次实验产生的随机数是一样的，有利于实验结果的比对。
 torch.cuda.manual_seed_all(opt.random_seed)  # 为所有GPU设置随机数的种子。
 opt = opt_settings(opt)
 
-
-
-dataloaders, dataloaders_train_tsne, old_train_dataloader, data_info, data_sample, opt = data_settings(opt)
+dataloaders_Source, dataloaders_train_tsne_Source, old_train_dataloader_Source, data_info_Source, data_sample_Source, opt_Source = data_settings(opt)
 opt = opt_test_settings(opt)
 
-trainer = HICMD(opt) # Initial the trainer
-trainer.cnt_cumul = trainer.resume(opt)    
 
-pseudo_label_generate(trainer,opt)
+
+# Set the parameters
+config                       = {}
+config['max_round']          = 40
+config['adv_warm_max_round'] = 1
+config['lr2_ramp_factor']    = 60
+config['aa_drop']            = true     # Whether to drop the aa batch in self-training
+output_directory             = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/MixDatasets"
+
+for round_idx in range(config['max_round']): # config['max_round']=40   40轮
+   ### setup folders
+   round_output_directory = os.path.join(output_directory, str(round_idx))
+   checkpoint_directory, image_directory, pseudo_directory = prepare_sub_folder_pseudo(round_output_directory)  # 设置断点，图像，和伪标签的存储路径。
+   config['data_root'] = pseudo_directory  # 存储伪标签的存储路径。
+
+   # In the initial round, we disenable self-training and warmup the network with adversarial training
+   # At the round of adv_warm_max_round, we switch to self-training
+   if round_idx == config['adv_warm_max_round']:   # config['adv_warm_max_round'] =1 
+      config['lr2'] *= config['lr2_ramp_factor']   # The factor to multiply the lr2 after switching to self-training
+      config['id_adv_w'] = 0.0
+      config['id_adv_w_max'] = 0.0
+      config['id_tgt'] = True
+      config['teacher'] = '' # we do not use teacher in the self-training
+      if config['aa_drop']:
+            config['aa'] = False
+
+   ### Evaluate source model ###
+   if round_idx == 0: # 如果是第一轮训练，就需要加载预训练的模型。
+      ### Model initialization with source model for test ###
+      # Load the pretrained HICMD model.
+      trainer = HICMDPP(opt) 
+      trainer.cnt_cumul = trainer.resume(opt)    
+      trainer.cuda()  # 将模型移动到cuda上。
+      # 读取在源域数据集合上，预先训练好的DGNet模型。
+      # trainer.test(config)   # annotated by sam 
+      # #write_loss(iterations, trainer, train_writer)  # annotated by sam 
+      # rank1 = trainer.rank_1
+      # rank5 = trainer.rank_5
+      # rank10 = trainer.rank_10
+      # mAP0 = trainer.mAP_zero
+      # mAP05 = trainer.mAP_half
+      # mAPn1 = trainer.mAP_neg_one
+
+      # mAP_list.append(mAP05)
+      # rank1_list.append(rank1.numpy())
+      # rank5_list.append(rank5.numpy())
+      # rank10_list.append(rank10.numpy())
+
+   ### Pseudo-label generation ###
+   trainer.generate_pseudo_label(config)  # 在这里进行Pseudo-label的生成。这个是DGNet没有的。
+   #　目标域的训练图像就是train_all文件夹下面的所有图像。只是在使用的时候不利用文件夹名称的标签信息。而是通过特征聚类来分配标签。

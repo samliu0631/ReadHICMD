@@ -44,12 +44,6 @@ dataloaders, dataloaders_train_tsne, old_train_dataloader, data_info, data_sampl
 opt = opt_test_settings(opt)
 
 
-# 写一个新的dataloader，能够加载sysu的数据。
-
-
-# 根据已有模型，产生伪标签。
-
-
 # 训练网络初始化
 trainer = HICMD(opt) # Initial the trainer
 trainer.cnt_cumul = trainer.resume(opt) if len(opt.resume_name) > 0 else trainer.cnt_cumul   # 这里相当于三目运算。
