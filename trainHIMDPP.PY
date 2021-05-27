@@ -55,7 +55,7 @@ torch.manual_seed(opt.random_seed)           # 设置 (CPU) 生成随机数的�
 torch.cuda.manual_seed_all(opt.random_seed)  # 为所有GPU设置随机数的种子。
 opt = opt_settings(opt)
 
-dataloaders_Source, dataloaders_train_tsne_Source, old_train_dataloader_Source, data_info_Source, data_sample_Source, opt_Source = data_settings(opt)
+dataloaders_Source, dataloaders_train_tsne_Source, old_train_dataloader_Source, data_info_Source, data_sample_Source, opt = data_settings(opt)
 opt = opt_test_settings(opt)
 
 
@@ -65,7 +65,7 @@ config                       = {}
 config['max_round']          = 40
 config['adv_warm_max_round'] = 1
 config['lr2_ramp_factor']    = 60
-config['aa_drop']            = true     # Whether to drop the aa batch in self-training
+config['aa_drop']            = True     # Whether to drop the aa batch in self-training
 output_directory             = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/MixDatasets"
 
 for round_idx in range(config['max_round']): # config['max_round']=40   40轮
@@ -108,5 +108,5 @@ for round_idx in range(config['max_round']): # config['max_round']=40   40轮
       # rank10_list.append(rank10.numpy())
 
    ### Pseudo-label generation ###
-   trainer.generate_pseudo_label(config)  # 在这里进行Pseudo-label的生成。这个是DGNet没有的。
+   trainer.generate_pseudo_label(opt)  # 在这里进行Pseudo-label的生成。这个是DGNet没有的。
    #　目标域的训练图像就是train_all文件夹下面的所有图像。只是在使用的时候不利用文件夹名称的标签信息。而是通过特征聚类来分配标签。

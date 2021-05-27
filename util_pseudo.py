@@ -1,4 +1,5 @@
 import os
+from shutil import rmtree
 
 def prepare_sub_folder_pseudo(output_directory):
     image_directory = os.path.join(output_directory, 'images')

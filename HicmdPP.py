@@ -1881,6 +1881,7 @@ class HICMDPP(nn.Module):
         for i in range(x.size(0)):
             out[i,:,:,:] = self.rand_erasing(x[i,:,:,:])
         return out
+        
     # generate pseudo label of target domain.
     def generate_pseudo_label(self,opt):
         self.eval()
@@ -1891,27 +1892,153 @@ class HICMDPP(nn.Module):
         transform_val_list = transform_val_list + [transforms.ToTensor()]
         transform_val_list = transform_val_list + [transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
 
-        data_transforms = {}           
-        for x in opt.phase_data:        # 'train_all', 'gallery', 'query'
-            data_transforms[x] = transforms.Compose(transform_val_list)  
-
-        image_datasets = { x: datasets.ImageFolder(    os.path.join(opt.data_dir, Target_data_name, x),   data_transforms[x]     )   for x in opt.phase_data}
+        data_transforms = {}          
+        data_transforms['train_all'] = transforms.Compose(transform_val_list) 
+        image_datasets = { x: datasets.ImageFolder(    os.path.join(opt.data_dir, Target_data_name, x),   data_transforms[x]     )   for x in ['train_all']}
+        dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=64, shuffle=False,
+                                                    num_workers=16, pin_memory=True, drop_last=False) for x in ['train_all']}
         
-        dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.set_batchsize[x], shuffle=opt.set_shuffle[x],
-                                                    num_workers=opt.set_workers[x], pin_memory=opt.pin_memory, drop_last=opt.set_droplast[x]) for x in opt.phase_data}
-    
+        train_path = image_datasets['train_all'].imgs
+
         data_info = {}
         data_info['train_all_cam'], data_info['train_all_label'], data_info['train_all_modal'] = get_attribute(opt.data_flag, image_datasets['train_all'].imgs, flag = opt.type_domain_label)
-            
-        gallery_feature, gallery_feature_raw = \
-                extract_feature(opt, trainer, dataloaders['train_all'],'train_all', data_info['train_all_modal'], data_info['train_all_cam'])
 
+
+        
+
+        with torch.no_grad():
+            target_features =self.extract_features(opt, dataloaders['train_all'], data_info['train_all_modal'], data_info['train_all_cam'])   
+        
         self.train()
 
+        
+        # 根据提取的特征，进行图像的分组。
+        self.clustering( target_features, train_path, opt )
+
+
+
+    def clustering(self, train_feature, train_path, opt):
+
+        ######################################################################
+        alpha = 0.5
+
+        n_samples = train_feature.shape[0]
+        train_feature_clone = train_feature.clone()
+        train_feature_clone[:, 512:1024] *= alpha  # since we count 0.5 for the fine-grained feature. 0.7*0.7=0.49
+        train_dist = torch.mm(train_feature_clone, torch.transpose(train_feature, 0, 1)) / (1 + alpha)
+        print(train_dist)
+
+        if opt['time_constraint']:
+            print('--------------------------Use Time Constraint---------------------------')
+            train_camera_id, train_time_id, train_labels = get_id(train_path, time_constraint = opt['time_constraint'])
+            train_time_id = np.asarray(train_time_id)
+            train_camera_id = np.asarray(train_camera_id)
+
+            # Long Time
+            for i in range(n_samples):
+                t_time = train_time_id[i]
+                index = np.argwhere(np.absolute(train_time_id - t_time) > 40000).flatten()
+                train_dist[i, index] = -1
+                print(len(index))
+
+            # Same Camera Long Time
+            for i in range(n_samples):
+                t_time = train_time_id[i]
+                t_cam = train_camera_id[i]
+                index = np.argwhere(np.absolute(train_time_id - t_time) > 5000).flatten()
+                c_index = np.argwhere(train_camera_id == t_cam).flatten()
+                index = np.intersect1d(index, c_index)
+                train_dist[i, index] = -1
+                print(len(index))
+
+        print('--------------------------Start Re-ranking---------------------------')
+        train_dist = re_ranking_one(train_dist.cpu().numpy())
+        print('--------------------------Clustering---------------------------')
+        # cluster
+        min_samples = opt['clustering']['min_samples']
+        eps = opt['clustering']['eps']
+
+        cluster = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed', n_jobs=8)
+        ### non-negative clustering
+        train_dist = np.maximum(train_dist, 0)
+        ###
+        cluster = cluster.fit(train_dist)
+        print('Cluster Class Number:  %d' % len(np.unique(cluster.labels_)))
+        # center = cluster.core_sample_indices_
+        labels = cluster.labels_
+
+        return labels
 
 
 
 
+    def extract_features(self, opt,  dataloaders,  modals, cams):
+        str_ms = opt.test_ms.split(',')
+        ms = []
+        for s in str_ms:
+            s_f = float(s)
+            ms.append(math.sqrt(s_f))
+
+        modals_set = []
+        for i in range(math.ceil(len(dataloaders.dataset.imgs) / dataloaders.batch_size)):
+            modals_set.append(modals[i * dataloaders.batch_size:(i+1)*dataloaders.batch_size])
+        cams_set = []
+        for i in range(math.ceil(len(dataloaders.dataset.imgs) / dataloaders.batch_size)):
+            cams_set.append(cams[i * dataloaders.batch_size:(i+1)*dataloaders.batch_size])
+
+        features_all = []
+
+        for cnt, data in enumerate(dataloaders):  # Iterate over data.
+            img, label = data                   # 获取图像和标签。
+            b, c, h, w = img.size()             # 获取图像的尺寸。
+            ff_all = []
+            cnt_first = 0
+            input_img = Variable(img.cuda())  # 将图像移动到ｃｕｄａ上，并转换为ｖａｒｉａｂｌｅ变量。  
+            for i in range(2):
+                if(i==1):
+                    img = fliplr(img)
+                for scale in ms:
+                    cnt_first += 1
+                    if scale != 1:
+                        # bicubic is only  available in pytorch>= 1.1
+                        input_img = nn.functional.interpolate(input_img, scale_factor=scale, mode='bicubic', align_corners=False)
+                    
+                    # extract features.
+                    feature, _ = self.forward(opt, input_img, modals_set[cnt], cams_set[cnt])
+
+                    if cnt_first == 1:
+                        ff_all = feature
+                    else:
+                        for k in range(len(feature)):
+                            ff_all[k] += feature[k]     # 这里将正反两次的提取特征进行了累加。
+
+
+            # norm feature
+            if opt.test_norm:
+                ff_all_tmp = ff_all
+                ff_all = []
+                for k in range(len(ff_all_tmp)):
+                    ff = ff_all_tmp[k]
+                    fnorm = torch.norm(ff, p=2, dim=1, keepdim=True)
+                    ff = ff.div(fnorm.expand_as(ff))
+                    ff_all += [ff]
+
+            if cnt == 0:
+                for k in range(len(ff_all)):
+                    if opt.test_gpu:
+                        features_all += [torch.FloatTensor().cuda()]
+                    else:
+                        features_all += [torch.FloatTensor()]
+
+
+            for k in range(len(ff_all)):
+                if opt.test_gpu:
+                    features_all[k] = torch.cat((features_all[k],ff_all[k].data), 0)
+                else:
+                    features_all[k] = torch.cat((features_all[k],ff_all[k].data.cpu()), 0)
+
+
+        return features_all
 
 
 def recover(inp):
@@ -1994,6 +2121,36 @@ def find_array(idx_all, idx_target):
         new_idx.extend(find_idx)
     return new_idx
 
+
+
+def get_id(img_path, time_constraint = False):
+    camera_id = []
+    time_id = []
+    labels = []
+    for path, v in img_path:
+        # filename = path.split('/')[-1]
+        filename = os.path.basename(path)
+        label = filename[0:4]
+        camera = filename.split('c')[1]
+        if time_constraint:
+            metadata = filename.split('_')
+            num_metadata = len(metadata)
+            if num_metadata == 3:
+                time = filename.split('f')[1]
+            elif num_metadata == 4:
+                time = metadata[2]
+        # print(camera)
+        if label[0:2] == '-1':
+            labels.append(-1)
+        else:
+            labels.append(int(label))
+        camera_id.append(int(camera[0]))
+        if time_constraint:
+            if num_metadata == 3:
+                time_id.append(int(time[0:7]))
+            elif num_metadata == 4:
+                time_id.append(int(time[0:6]))
+    return camera_id, labels, time_id
 
 
 

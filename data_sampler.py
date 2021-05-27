@@ -9,7 +9,7 @@ class PosNegSampler(datasets.ImageFolder):
     def __init__(self, root, transform, data_flag = 1, name_samping = 'RAND', num_pos = 4, num_neg = 0, opt = ''):
         super(PosNegSampler, self).__init__(root, transform)
         self.cams, self.real_labels, self.modals = get_attribute(data_flag, self.samples, flag = 0)
-
+        # 获得数据集合中每张图像 对应的标签 和模态编号。
 
 
         self.num_pos = num_pos
@@ -270,15 +270,15 @@ class PosNegSampler(datasets.ImageFolder):
 
 
 
-    def __getitem__(self, index):
-        ori_path, order = self.samples[index]
-        real_label = self.real_labels[index]
+    def __getitem__(self, index): # 这个函数定义了如何对数据集合进行数据的调用
+        ori_path, order = self.samples[index]  #　这里的order应该是按照顺序索引文件夹　得到的序号。
+        real_label = self.real_labels[index]   # 获得图片的真实标签。
         cam = self.cams[index]
         modal = self.modals[index]
         attribute = {'order':order, 'label':real_label, 'cam':cam, 'modal':modal}
-        ori = self.loader(ori_path)
+        ori = self.loader(ori_path)  # 加载图像。 PIL格式。
         if self.transform is not None:
-            ori = self.transform(ori)
+            ori = self.transform(ori)  # 将图像转换为tensor格式。
 
         if self.num_pos > 0:
             if 'P_PAIR' in self.name_samping:
@@ -371,10 +371,11 @@ class PosNegSampler(datasets.ImageFolder):
         # pos = torch.cat((pos0.view(1,c,h,w), pos1.view(1,c,h,w), pos2.view(1,c,h,w), pos3.view(1,c,h,w)), 0)
         return ori, pos, neg, attribute, attribute_pos, attribute_neg
 
+
 def get_attribute(data_flag, img_samples, flag):
-    # data_flag:   a  number
+    # data_flag:   a  number，用来表示对那个数据集合进行操作。
     # img_samples:  list all the path and type of images.
-    # flag: number
+    # flag: number，
 
     cams = []
     labels = []
@@ -395,13 +396,13 @@ def get_attribute(data_flag, img_samples, flag):
         change_set = [[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]]
     elif flag == 0:  # [1,2,4,5]->1, [3,6]->0
         change_set = [[1, 1], [2, 1], [3, 0], [4, 1], [5, 1], [6, 0]]
-    for i in range(len(change_set)):
+    for i in range(len(change_set)): # 如下代码，实际使用并没有起到实际作用。
         cams[np.where(cams == change_set[i][0])[0]] = int(change_set[i][1])
     cams = list(cams)
 
     return cams, labels, modals
 
-def get_cam(path, flag):
+def get_cam(path, flag):# 通过图像的名称来判断图像的类型，即红外还是可见光。
     filename = os.path.basename(path)
     if flag == 1:  # Market1501
         return int(filename.split('c')[1][0])
@@ -422,7 +423,7 @@ def get_real_label(path, flag):
         else:
             return int(label)
     elif flag == 5: # RegDB
-        return int(path.split('/')[-2])
+        return int(path.split('/')[-2])   # 将图片所在文件夹的编号，作为分类标签。
     elif flag == 6: # SYSU
         return int(path.split('/')[-2])
 
@@ -433,7 +434,7 @@ def gel_modal(path, flag):
         return int(0)
     elif flag == 5: # RegDB
         if filename[0] == 'T':  # Thermal : 0
-            return int(0)
+            return int(0)       # 根据图像首字符来判断图像的类型，是红外还是可见光。
         else:
             return int(1)
     elif flag == 6: # SYSU
