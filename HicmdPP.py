@@ -1908,14 +1908,14 @@ class HICMDPP(nn.Module):
             target_features = torch.load(modelname)           
         else:           
             with torch.no_grad():
-                target_features =self.extract_features(opt, dataloaders['train_all'], data_info['train_all_modal'], data_info['train_all_cam'])   
-            torch.save( testlist, modelname )
+                target_features = self.extract_features(opt, dataloaders['train_all'], data_info['train_all_modal'], data_info['train_all_cam'])   
+            torch.save( target_features, modelname )
 
         self.train()
 
         
         # 根据提取的特征，进行图像的分组。
-        self.clustering( target_features, train_path, opt )
+        self.clustering( target_features[0], train_path, opt )
 
 
 
