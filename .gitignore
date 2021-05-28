@@ -6,3 +6,4 @@ pretrained/
 .idea/
 .vscode/
 __pycache__/
+features.pt

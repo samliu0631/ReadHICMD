@@ -1903,12 +1903,14 @@ class HICMDPP(nn.Module):
         data_info = {}
         data_info['train_all_cam'], data_info['train_all_label'], data_info['train_all_modal'] = get_attribute(opt.data_flag, image_datasets['train_all'].imgs, flag = opt.type_domain_label)
 
+        modelname = "features.pt" # 用于保存目标域特征的文件名称。
+        if os.path.exists(modelname):
+            target_features = torch.load(modelname)           
+        else:           
+            with torch.no_grad():
+                target_features =self.extract_features(opt, dataloaders['train_all'], data_info['train_all_modal'], data_info['train_all_cam'])   
+            torch.save( testlist, modelname )
 
-        
-
-        with torch.no_grad():
-            target_features =self.extract_features(opt, dataloaders['train_all'], data_info['train_all_modal'], data_info['train_all_cam'])   
-        
         self.train()
 
         
