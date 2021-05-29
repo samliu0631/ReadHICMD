@@ -7,3 +7,7 @@ pretrained/
 .vscode/
 __pycache__/
 features.pt
+features_RegDB.pt
+features_SYSU.pt
+Label_RegDB.pt
+Label_SYSU.pt

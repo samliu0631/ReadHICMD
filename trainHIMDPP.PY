@@ -66,6 +66,7 @@ config['max_round']          = 40
 config['adv_warm_max_round'] = 1
 config['lr2_ramp_factor']    = 60
 config['aa_drop']            = True     # Whether to drop the aa batch in self-training
+config['data_root_a']        = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/RegDB_01"
 output_directory             = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/MixDatasets"
 
 for round_idx in range(config['max_round']): # config['max_round']=40   40轮
