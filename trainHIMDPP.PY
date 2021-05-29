@@ -108,5 +108,5 @@ for round_idx in range(config['max_round']): # config['max_round']=40   40轮
       # rank10_list.append(rank10.numpy())
 
    ### Pseudo-label generation ###
-   trainer.generate_pseudo_label(opt)  # 在这里进行Pseudo-label的生成。这个是DGNet没有的。
+   trainer.generate_pseudo_label(opt,config)  # 在这里进行Pseudo-label的生成。这个是DGNet没有的。
    #　目标域的训练图像就是train_all文件夹下面的所有图像。只是在使用的时候不利用文件夹名称的标签信息。而是通过特征聚类来分配标签。

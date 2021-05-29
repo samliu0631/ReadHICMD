@@ -19,6 +19,9 @@ from torch.optim import lr_scheduler
 from networks import Discriminator, ResidualEncoder,  ResidualDecoder, MLP
 from util_train import weights_init, get_model_list, vgg_preprocess, load_vgg16
 from random_erasing import RandomErasing
+from  re_ranking_one import re_ranking_one
+from sklearn.cluster import DBSCAN
+
 
 class HICMDPP(nn.Module):
     # 所有的神经网络模型都要继承 nn.Module.
@@ -1915,51 +1918,33 @@ class HICMDPP(nn.Module):
 
         
         # 根据提取的特征，进行图像的分组。
-        self.clustering( target_features[0], train_path, opt )
+        labels = self.clustering( target_features[0], train_path, opt )
+        print(labels)
 
+
+        ### copy and save images ###
+        n_samples = target_features[0].shape[0]                  # 获得目标域训练图像的数量。
+        opt['ID_class_b'] = int(max(labels)) + 1            # 记录分类后的图像标签类型数量。
+        self.copy_save(labels, train_path, n_samples, opt)  # 将目标域图像在伪标签文件夹下进行存储，同事
+        return
 
 
     def clustering(self, train_feature, train_path, opt):
 
         ######################################################################
-        alpha = 0.5
+        eps= 0.45
+        min_samples= 7
 
-        n_samples = train_feature.shape[0]
+        n_samples           = train_feature.shape[0]  # 获得特征的数量。
         train_feature_clone = train_feature.clone()
-        train_feature_clone[:, 512:1024] *= alpha  # since we count 0.5 for the fine-grained feature. 0.7*0.7=0.49
-        train_dist = torch.mm(train_feature_clone, torch.transpose(train_feature, 0, 1)) / (1 + alpha)
+        train_dist          = torch.mm( train_feature_clone, torch.transpose(train_feature, 0, 1) )
         print(train_dist)
-
-        if opt['time_constraint']:
-            print('--------------------------Use Time Constraint---------------------------')
-            train_camera_id, train_time_id, train_labels = get_id(train_path, time_constraint = opt['time_constraint'])
-            train_time_id = np.asarray(train_time_id)
-            train_camera_id = np.asarray(train_camera_id)
-
-            # Long Time
-            for i in range(n_samples):
-                t_time = train_time_id[i]
-                index = np.argwhere(np.absolute(train_time_id - t_time) > 40000).flatten()
-                train_dist[i, index] = -1
-                print(len(index))
-
-            # Same Camera Long Time
-            for i in range(n_samples):
-                t_time = train_time_id[i]
-                t_cam = train_camera_id[i]
-                index = np.argwhere(np.absolute(train_time_id - t_time) > 5000).flatten()
-                c_index = np.argwhere(train_camera_id == t_cam).flatten()
-                index = np.intersect1d(index, c_index)
-                train_dist[i, index] = -1
-                print(len(index))
 
         print('--------------------------Start Re-ranking---------------------------')
         train_dist = re_ranking_one(train_dist.cpu().numpy())
         print('--------------------------Clustering---------------------------')
         # cluster
-        min_samples = opt['clustering']['min_samples']
-        eps = opt['clustering']['eps']
-
+  
         cluster = DBSCAN(eps=eps, min_samples=min_samples, metric='precomputed', n_jobs=8)
         ### non-negative clustering
         train_dist = np.maximum(train_dist, 0)
@@ -1970,6 +1955,39 @@ class HICMDPP(nn.Module):
         labels = cluster.labels_
 
         return labels
+
+    
+    def copy_save(self, labels, train_path, n_samples, opt):
+        ### copy pseudo-labels in target ###
+        save_path = opt['data_root'] + '/train_all'
+        sample_b_valid = 0
+        for i in range(n_samples):
+            if labels[i] != -1:  # 剔除分配标签为-1的图像， 该图像在分类中被认为是野点。
+                src_path = train_path[i][0]
+                dst_id = labels[i]
+                dst_path = save_path + '/' + 'B_' + str(int(dst_id))  # 目标域 分类后 的有标签文件夹路径。
+                if not os.path.isdir(dst_path):
+                    os.mkdir(dst_path)
+                copyfile(src_path, dst_path + '/' + os.path.basename(src_path))  # 将train_all中的图像对应拷贝到 伪标签文件夹中。
+                sample_b_valid += 1
+
+        opt['sample_b'] = sample_b_valid  # 存储目标域中的有效图像数量。
+
+        ### copy ground truth in source ###
+        # train_all
+        src_all_path = opt['data_root_a']
+        # for dukemtmc-reid, we do not need multi-query
+        src_train_all_path = os.path.join(src_all_path, 'train_all')
+        subfolder_list = os.listdir(src_train_all_path)
+        file_list = []
+        for path, subdirs, files in os.walk(src_train_all_path):
+            for name in files:
+                file_list.append(os.path.join(path, name))
+        opt['ID_class_a'] = len(subfolder_list)  # 源域train_all文件夹下图像的类别。
+        opt['sample_a'] = len(file_list)         # 源域train_all文件夹下图像的总数量。
+        for name in subfolder_list:
+            copytree(src_train_all_path + '/' + name, save_path + '/A_' + name)   # 将源域train_all文件夹下的图像全部拷贝到伪标签代码下。
+        return
 
 
 
