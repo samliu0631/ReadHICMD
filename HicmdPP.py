@@ -21,7 +21,7 @@ from util_train import weights_init, get_model_list, vgg_preprocess, load_vgg16
 from random_erasing import RandomErasing
 from  re_ranking_one import re_ranking_one
 from sklearn.cluster import DBSCAN
-
+from shutil import copyfile, copytree
 
 class HICMDPP(nn.Module):
     # 所有的神经网络模型都要继承 nn.Module.
@@ -1886,7 +1886,7 @@ class HICMDPP(nn.Module):
         return out
         
     # generate pseudo label of target domain.
-    def generate_pseudo_label(self,opt):
+    def generate_pseudo_label(self,opt,config):
         self.eval()
         Target_data_name = "SYSU"
 
@@ -1918,18 +1918,18 @@ class HICMDPP(nn.Module):
 
         
         # 根据提取的特征，进行图像的分组。
-        labels = self.clustering( target_features[0], train_path, opt )
+        labels = self.clustering( target_features[0], train_path, config )
         print(labels)
 
 
         ### copy and save images ###
         n_samples = target_features[0].shape[0]                  # 获得目标域训练图像的数量。
-        opt['ID_class_b'] = int(max(labels)) + 1            # 记录分类后的图像标签类型数量。
-        self.copy_save(labels, train_path, n_samples, opt)  # 将目标域图像在伪标签文件夹下进行存储，同事
+        config['ID_class_b'] = int(max(labels)) + 1            # 记录分类后的图像标签类型数量。
+        self.copy_save(labels, train_path, n_samples, config)  # 将目标域图像在伪标签文件夹下进行存储，同事
         return
 
 
-    def clustering(self, train_feature, train_path, opt):
+    def clustering(self, train_feature, train_path, config):
 
         ######################################################################
         eps= 0.45
@@ -1957,9 +1957,9 @@ class HICMDPP(nn.Module):
         return labels
 
     
-    def copy_save(self, labels, train_path, n_samples, opt):
+    def copy_save(self, labels, train_path, n_samples, config ):
         ### copy pseudo-labels in target ###
-        save_path = opt['data_root'] + '/train_all'
+        save_path = config['data_root'] + '/train_all'
         sample_b_valid = 0
         for i in range(n_samples):
             if labels[i] != -1:  # 剔除分配标签为-1的图像， 该图像在分类中被认为是野点。
@@ -1971,11 +1971,11 @@ class HICMDPP(nn.Module):
                 copyfile(src_path, dst_path + '/' + os.path.basename(src_path))  # 将train_all中的图像对应拷贝到 伪标签文件夹中。
                 sample_b_valid += 1
 
-        opt['sample_b'] = sample_b_valid  # 存储目标域中的有效图像数量。
+        confi['sample_b'] = sample_b_valid  # 存储目标域中的有效图像数量。
 
         ### copy ground truth in source ###
         # train_all
-        src_all_path = opt['data_root_a']
+        src_all_path = confi['data_root_a']
         # for dukemtmc-reid, we do not need multi-query
         src_train_all_path = os.path.join(src_all_path, 'train_all')
         subfolder_list = os.listdir(src_train_all_path)
@@ -1983,8 +1983,8 @@ class HICMDPP(nn.Module):
         for path, subdirs, files in os.walk(src_train_all_path):
             for name in files:
                 file_list.append(os.path.join(path, name))
-        opt['ID_class_a'] = len(subfolder_list)  # 源域train_all文件夹下图像的类别。
-        opt['sample_a'] = len(file_list)         # 源域train_all文件夹下图像的总数量。
+        confi['ID_class_a'] = len(subfolder_list)  # 源域train_all文件夹下图像的类别。
+        confi['sample_a']   = len(file_list)         # 源域train_all文件夹下图像的总数量。
         for name in subfolder_list:
             copytree(src_train_all_path + '/' + name, save_path + '/A_' + name)   # 将源域train_all文件夹下的图像全部拷贝到伪标签代码下。
         return
