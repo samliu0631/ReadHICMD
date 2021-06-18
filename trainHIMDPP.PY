@@ -62,6 +62,9 @@ opt = opt_test_settings(opt)
 # 将目标训练集合中的数据按照红外和可见光进行分类。
 
 
+
+
+
 # Set the parameters
 config                       = {}
 config['max_round']          = 40

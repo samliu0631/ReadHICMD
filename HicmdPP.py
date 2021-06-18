@@ -1897,29 +1897,53 @@ class HICMDPP(nn.Module):
         transform_val_list = transform_val_list + [transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
 
         data_transforms = {}          
-        data_transforms['train_all'] = transforms.Compose(transform_val_list) 
-        image_datasets = { x: datasets.ImageFolder(    os.path.join(opt.data_dir, Target_data_name, x),   data_transforms[x]     )   for x in ['train_all']}
-        dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=64, shuffle=False,
-                                                    num_workers=16, pin_memory=True, drop_last=False) for x in ['train_all']}
+        data_transforms['train_all']     = transforms.Compose(transform_val_list) 
+        data_transforms['train_all_IR']  = transforms.Compose(transform_val_list)
+        data_transforms['train_all_RGB'] = transforms.Compose(transform_val_list)
+
+        datasetlist    = ['train_all','train_all_IR', 'train_all_RGB' ]
+        image_datasets = { x: datasets.ImageFolder(os.path.join(opt.data_dir, Target_data_name, x),   data_transforms[x]     )   for x in datasetlist  }
+        dataloaders    = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=64, shuffle=False,
+                                                    num_workers=16, pin_memory=True, drop_last=False) for x in datasetlist }
         
-        train_path = image_datasets['train_all'].imgs
+        train_path_IR  = image_datasets['train_all_IR'].imgs
+        train_path_RGB = image_datasets['train_all_RGB'].imgs
 
-        data_info = {}
-        data_info['train_all_cam'], data_info['train_all_label'], data_info['train_all_modal'] = get_attribute(opt.data_flag, image_datasets['train_all'].imgs, flag = opt.type_domain_label)
+        data_info   = {}
 
-        modelname = "features_SYSU.pt" # 用于保存目标域特征的文件名称。
+        data_info['train_all_IR_cam'], data_info['train_all_IR_label'], \
+            data_info['train_all_IR_modal'] = get_attribute( \
+            opt.data_flag, image_datasets['train_all_IR'].imgs, flag = opt.type_domain_label)
+
+        data_info['train_all_RGB_cam'], data_info['train_all_RGB_label'],  \
+            data_info['train_all_RGB_modal'] = get_attribute( \
+            opt.data_flag, image_datasets['train_all_RGB'].imgs, flag = opt.type_domain_label)
+
+
+        modelname = "features_SYSU_IR.pt" # 用于保存目标域特征的文件名称。
         if os.path.exists(modelname):
             target_features = torch.load(modelname)           
         else:           
             with torch.no_grad():
-                target_features = self.extract_features(opt, dataloaders['train_all'], data_info['train_all_modal'], data_info['train_all_cam'])   
+                target_features = self.extract_features(opt, dataloaders['train_all_IR'], \
+                data_info['train_all_IR_modal'], data_info['train_all_IR_cam'])   
             torch.save( target_features, modelname )
+
+        modelname = "features_SYSU_RGB.pt" # 用于保存目标域特征的文件名称。
+        if os.path.exists(modelname):
+            target_features = torch.load(modelname)           
+        else:           
+            with torch.no_grad():
+                target_features = self.extract_features(opt, dataloaders['train_all_RGB'], \
+                data_info['train_all_RGB_modal'], data_info['train_all_RGB_cam'])   
+            torch.save( target_features, modelname )
+
 
         self.train()
 
         
         # 根据提取的特征，进行图像的分组。
-        modelname = "Label_SYSU.pt" # 用于保存目标域特征的文件名称。
+        #modelname = "Label_SYSU.pt" # 用于保存目标域特征的文件名称。
         if os.path.exists(modelname):
             labels = torch.load(modelname)           
         else:           
