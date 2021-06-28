@@ -11,3 +11,7 @@ features_RegDB.pt
 features_SYSU.pt
 Label_RegDB.pt
 Label_SYSU.pt
+features_SYSU_IR.pt
+features_SYSU_RGB.pt
+Label_SYSU_IR.pt
+Label_SYSU_RGB.pt

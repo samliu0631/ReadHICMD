@@ -15,12 +15,13 @@ import torch.nn as nn
 import os
 import torch.optim as optim
 from torch.optim import lr_scheduler
+import numpy as np
 
 from networks import Discriminator, ResidualEncoder,  ResidualDecoder, MLP
 from util_train import weights_init, get_model_list, vgg_preprocess, load_vgg16
 from random_erasing import RandomErasing
 from  re_ranking_one import re_ranking_one
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import DBSCAN , MiniBatchKMeans
 from shutil import copyfile, copytree
 
 class HICMDPP(nn.Module):
@@ -1920,41 +1921,148 @@ class HICMDPP(nn.Module):
             opt.data_flag, image_datasets['train_all_RGB'].imgs, flag = opt.type_domain_label)
 
 
-        modelname = "features_SYSU_IR.pt" # 用于保存目标域特征的文件名称。
-        if os.path.exists(modelname):
-            target_features = torch.load(modelname)           
+        featurename_IR = "features_SYSU_IR.pt" # 用于保存目标域特征的文件名称。
+        if os.path.exists(featurename_IR):
+            target_features_IR = torch.load(featurename_IR)           
         else:           
             with torch.no_grad():
-                target_features = self.extract_features(opt, dataloaders['train_all_IR'], \
+                target_features_IR = self.extract_features(opt, dataloaders['train_all_IR'], \
                 data_info['train_all_IR_modal'], data_info['train_all_IR_cam'])   
-            torch.save( target_features, modelname )
+            torch.save( target_features_IR, featurename_IR )
 
-        modelname = "features_SYSU_RGB.pt" # 用于保存目标域特征的文件名称。
-        if os.path.exists(modelname):
-            target_features = torch.load(modelname)           
+        featurename_RGB = "features_SYSU_RGB.pt" # 用于保存目标域特征的文件名称。
+        if os.path.exists(featurename_RGB):
+            target_features_RGB = torch.load(featurename_RGB)           
         else:           
             with torch.no_grad():
-                target_features = self.extract_features(opt, dataloaders['train_all_RGB'], \
+                target_features_RGB = self.extract_features(opt, dataloaders['train_all_RGB'], \
                 data_info['train_all_RGB_modal'], data_info['train_all_RGB_cam'])   
-            torch.save( target_features, modelname )
-
+            torch.save( target_features_RGB, featurename_RGB )
 
         self.train()
 
-        
         # 根据提取的特征，进行图像的分组。
-        #modelname = "Label_SYSU.pt" # 用于保存目标域特征的文件名称。
-        if os.path.exists(modelname):
-            labels = torch.load(modelname)           
+        Labelname_IR = "Label_SYSU_IR.pt" # 用于保存目标域特征的文件名称。
+        if os.path.exists(Labelname_IR):
+            labels_IR = torch.load(Labelname_IR)           
         else:           
-            labels = self.clustering( target_features[0], train_path, config )
-            torch.save( labels, modelname )
+            labels_IR = self.clustering( target_features_IR[0], train_path_IR, config )
+            torch.save( labels_IR, Labelname_IR )
+
+        # 根据提取的特征，进行图像的分组。
+        Labelname_RGB = "Label_SYSU_RGB.pt"
+        if os.path.exists(Labelname_RGB):
+            labels_RGB = torch.load( Labelname_RGB )           
+        else:           
+            labels_RGB = self.clustering( target_features_RGB[0], train_path_RGB, config )
+            torch.save( labels_RGB, Labelname_RGB )
+
+        # 记录分类后的图像标签类型数量。
+        RGBNum = int(max( labels_RGB ))  + 1           
+        IRNum  = int(max( labels_IR  ))  + 1
+        config['ID_class_b']  = RGBNum
+
+        # 计算RGB图像， 对应分组的平均特征。
+        RGBclassID      = range(RGBNum)
+        RGBfeatureList  = []
+        for i in range(RGBNum):
+            FeatureIndexRGB = np.where(labels_RGB == i )
+            print(FeatureIndexRGB)
+            # 提取特征
+            currentfeature = target_features_RGB[0][FeatureIndexRGB]
+            #计算中值。
+            meanfeature = torch.mean(currentfeature, dim = 0, keepdim = True)
+            RGBfeatureList.append(meanfeature)
+
+        # 计算IR图像中， 对应分组的平均特征。
+        IRfeatureList = []
+        for j in range(IRNum):
+            FeatureIndexIR = np.where(labels_IR == j )
+            currentFeature = target_features_IR[0][FeatureIndexIR]
+            #　计算中值。
+            meanfeature = torch.mean(currentFeature, dim = 0 , keepdim = True)
+            IRfeatureList.append(meanfeature)
+
+        # 根据分组数最小的分组，来计算匹配分类。
+        if RGBNum > IRNum:
+            MinimumClassNum = IRNum
+            LargerClassNum  = RGBNum
+            RefFeatureList  = IRfeatureList
+            ComFeatureList  = RGBfeatureList
+            Changedlabels   = labels_RGB
+        else:
+            MinimumClassNum = RGBNum
+            LargerClassNum  = IRNum
+            RefFeatureList  = RGBfeatureList
+            ComFeatureList  = IRfeatureList
+            Changedlabels   = labels_IR
+
+
+
+        # 根据最小的分组，来进行分类的匹配。
+        NewLabelList = [] 
+        MinClassDist = [] 
+        UseFlag      = np.zeros(LargerClassNum)
+        for i in range(MinimumClassNum):
+            CurRef   = np.array( RefFeatureList[i] )
+            MinDist  = 100000
+            Index    = -1 
+            for j in range(LargerClassNum):
+                # 如果该类已经匹配过，就跳过。
+                if UseFlag[j]==1:
+                    continue
+                CurCom   = np.array( ComFeatureList[j] )
+                FeatDist = np.sqrt( np.sum( ( CurRef - CurCom ) **2 ) )
+                if FeatDist < MinDist  :
+                    MinDist = FeatDist
+                    Index   = j
+
+            # 记录对应的IR图像分类标签。
+            MinClassDist.append( MinDist )
+            NewLabelList.append( Index )
+            UseFlag[Index] = 1
+        #
+        Changedlabels = self.ChangeLabel(NewLabelList,Changedlabels)
+
+        if RGBNum > IRNum:
+            labels_RGB  = Changedlabels 
+        else:
+            labels_IR = Changedlabels
+
 
         ### copy and save images ###
-        n_samples = target_features[0].shape[0]                  # 获得目标域训练图像的数量。
-        config['ID_class_b'] = int(max(labels)) + 1            # 记录分类后的图像标签类型数量。
-        self.copy_save(labels, train_path, n_samples, config)  # 将目标域图像在伪标签文件夹下进行存储，同事
+        n_samples_RGB = target_features_RGB[0].shape[0]             # 获得目标域训练RGB图像的数量。
+        n_samples_IR  = target_features_IR[0].shape[0]              # 获得目标域训练IR图像的数量。
+        self.copy_save( labels_RGB, train_path_RGB, n_samples_RGB, config )  # 将目标域图像在伪标签文件夹下进行存储，同事
+        self.copy_save( labels_IR,  train_path_IR,  n_samples_IR,  config )   
+        self.copy_save_gt( config ) 
         return
+
+
+
+    def ChangeLabel(self, NewLabelList, Changedlabels ):
+        NewLabels = -1 * np.ones( len( Changedlabels ) )
+        for i in range( len( NewLabelList ) ):
+            Index = np.where(Changedlabels == NewLabelList[i] )
+            NewLabels[Index] = i
+        return NewLabels
+            
+
+
+
+
+    def KmeansClustering(self,train_feature, ClusterNum):
+        n_samples           = train_feature.shape[0]  # 获得特征的数量。
+        train_feature_clone = train_feature.clone()
+        train_dist          = torch.mm( train_feature_clone, torch.transpose(train_feature, 0, 1) )
+        train_dist          = re_ranking_one(train_dist.cpu().numpy())
+        train_dist          = np.maximum(train_dist, 0)
+        kmeans              = MiniBatchKMeans(n_clusters = ClusterNum).fit(train_dist)
+        labels              = kmeans.labels_
+        kmeansCenter        = kmeans.cluster_centers_
+
+
+        return labels, kmeansCenter
 
 
     def clustering(self, train_feature, train_path, config):
@@ -1981,7 +2089,7 @@ class HICMDPP(nn.Module):
         print('Cluster Class Number:  %d' % len(np.unique(cluster.labels_)))
         # center = cluster.core_sample_indices_
         labels = cluster.labels_
-
+        #DBSCANCenter = cluster
         return labels
 
     
@@ -1998,13 +2106,16 @@ class HICMDPP(nn.Module):
                     os.mkdir(dst_path)
                 copyfile(src_path, dst_path + '/' + os.path.basename(src_path))  # 将train_all中的图像对应拷贝到 伪标签文件夹中。
                 sample_b_valid += 1
-
         config['sample_b'] = sample_b_valid  # 存储目标域中的有效图像数量。
 
-        ### copy ground truth in source ###
+
+
+    def copy_save_gt(self, config):
+          ### copy ground truth in source ###
         # train_all
+        save_path = config['data_root'] + '/train_all'
         src_all_path = config['data_root_a']
-        # for dukemtmc-reid, we do not need multi-query
+        # for dukemtmc-reid, we do not need multi-query/
         src_train_all_path = os.path.join(src_all_path, 'train_all')
         subfolder_list = os.listdir(src_train_all_path)
         file_list = []
@@ -2015,6 +2126,7 @@ class HICMDPP(nn.Module):
         config['sample_a']   = len(file_list)         # 源域train_all文件夹下图像的总数量。
         for name in subfolder_list:
             copytree(src_train_all_path + '/' + name, save_path + '/A_' + name)   # 将源域train_all文件夹下的图像全部拷贝到伪标签代码下。
+        
         return
 
 

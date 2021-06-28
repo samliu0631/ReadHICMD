@@ -311,7 +311,7 @@ def data_settings(opt):
     # else:
     #     dataloaders_train_tsne = []
     #---------------------------------------# Load data
-    since = time.time()
+    since = time.time()   # test: gallery 和 query 。  train: gallery query train_all
     image_datasets = { x: datasets.ImageFolder(    os.path.join(opt.data_dir, opt.data_name, x),   data_transforms[x]     )   for x in opt.phase_data}
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.set_batchsize[x], shuffle=opt.set_shuffle[x],
                                                   num_workers=opt.set_workers[x], pin_memory=opt.pin_memory, drop_last=opt.set_droplast[x]) for x in opt.phase_data}

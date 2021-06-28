@@ -12,9 +12,9 @@ class PosNegSampler(datasets.ImageFolder):
         # 获得数据集合中每张图像 对应的标签 和模态编号。
 
 
-        self.num_pos = num_pos
-        self.num_neg = num_neg
-        self.name_samping = name_samping
+        self.num_pos = num_pos  # 表示正向实例数量
+        self.num_neg = num_neg  # 表示负实例数量。
+        self.name_samping = name_samping  # ['P_PAIR', 'N_PAIR']
         self.opt = opt
 
     def _get_cam_id(self, path):
@@ -25,84 +25,95 @@ class PosNegSampler(datasets.ImageFolder):
         return int(camera_id)-1
 
     def _get_pair_pos_sample(self, index):
-
+        # 找到和index 同一个类的图像 序号（　剔除index　）###################################################
         pos_index = np.argwhere(np.asarray(self.real_labels) == np.asarray(self.real_labels[index]))
-        pos_index = pos_index.flatten()
-        pos_index = np.setdiff1d(pos_index, index) # delete index
+        pos_index = pos_index.flatten()     # 降到1维。
+        pos_index = np.setdiff1d(pos_index, index) # delete index 删除当前index图像。
 
-        modal = self.modals[index]
+        # 根据pos_index找到和index同类不同域的图像序号cross_index ##################################################
+        modal = self.modals[index] #　当前图像对应的模态。
         cross_index = []
         for i in range(len(pos_index)):
-            if modal != self.modals[pos_index[i]]:
-                cross_index.append(pos_index[i])
+            if modal != self.modals[pos_index[i]]:#如果当前图像和index对应图像 不同域。
+                cross_index.append(pos_index[i]) # 记录同一个类，但是不同域的图像ID.
 
+        # 记录红外中心图像序号 IR_pivot_idx， 可见光中心图像序号 RGB_pivot_idx ###################################
         flag_IR_pos_same_cam = False
-
         if modal == 0: # 0:IR
-            IR_pivot_idx = index
-            RGB_pivot_idx = int(cross_index[np.random.permutation(len(cross_index))[0]])
+            IR_pivot_idx  = index # 记录红外的轴图像序号
+            RGB_pivot_idx = int( cross_index[np.random.permutation( len(cross_index) )[0]] ) #　记录可见光的轴图像
         else:
-            IR_pivot_idx = int(cross_index[np.random.permutation(len(cross_index))[0]])
-            RGB_pivot_idx = index
+            IR_pivot_idx  = int(cross_index[np.random.permutation(len(cross_index))[0]])  # 记录红外的轴图像。
+            RGB_pivot_idx = index  # 记录可见光的周图像。
 
-        IR_pivot_cam = self.cams[IR_pivot_idx]
-
+        # IR_pivot_cam：红外图像的相机
+        IR_pivot_cam = self.cams[IR_pivot_idx] # 红外轴图像的相机类型
+        # IR_same_cam_idx：所有红外图像的索引号。
         IR_same_cam_idx = np.argwhere(np.asarray(self.modals) == np.asarray(self.modals[IR_pivot_idx])).flatten()
+        # IR_same_cam_idx：打乱顺序的红外图像索引号。
         IR_same_cam_idx = IR_same_cam_idx[np.random.permutation(len(IR_same_cam_idx))]
         # IR_pivot_cam = self.cams[IR_pivot_idx]
 
-        # other IR pivot (same cam, different ID)
+        # other IR pivot (same cam, different ID)# 找到除了红外中心图像外的 另一个红外中心图像，不同类。
         IR_pivot_idx_all = []
         IR_pivot_label_all = []
-        IR_pivot_idx_all.append(IR_pivot_idx)
-        IR_pivot_label_all.append(self.real_labels[IR_pivot_idx])
+        IR_pivot_idx_all.append(IR_pivot_idx)  # 在IR_pivot_idx_all中添加红外轴图像序号。
+        IR_pivot_label_all.append(self.real_labels[IR_pivot_idx]) #　添加红外轴图像的类别号．
         cnt = 0
-        is_find = False
-        if self.opt.pos_mini_batch > 1:
+        is_find = False# self.opt.pos_mini_batch =2 
+        if self.opt.pos_mini_batch > 1: # 从数据库中选择　和中心图像　不同类但同域的　1个标签　作为轴图像．
             while not is_find:
-                selected_idx = int(IR_same_cam_idx[cnt])
-                if not self.real_labels[selected_idx] in IR_pivot_label_all:
-                    IR_pivot_idx_all.append(selected_idx)
-                    IR_pivot_label_all.append(self.real_labels[selected_idx])
-                if len(IR_pivot_idx_all) == self.opt.pos_mini_batch:
+                selected_idx = int( IR_same_cam_idx[cnt] )  # 选择红外图像
+                if not self.real_labels[selected_idx] in IR_pivot_label_all: # 如果当前图像和中心图像不是一类的红外图像。
+                    IR_pivot_idx_all.append(selected_idx)   # 记录红外中心图像的索引号
+                    IR_pivot_label_all.append(self.real_labels[selected_idx])  # 记录红外中心图像的标签．
+                if len(IR_pivot_idx_all) == self.opt.pos_mini_batch: #只有两个，两个红外不同类图像，包括index所在类．
                     is_find = True
                 cnt += 1
 
         # find IR pos/neg sample
         selected_pos_index = []
         selected_pos_path = []
-        for k in range(len(IR_pivot_idx_all)):
+        for k in range(len(IR_pivot_idx_all)): 
+            #　遍历　２个不同类的红外轴图像。
             one_set = []
-            selected_idx = IR_pivot_idx_all[k]
+            selected_idx = IR_pivot_idx_all[k]    # 当前红外轴图像．
+            # 获得　和　红外轴图像　相同类　的图像索引（包括IR和RGB）．同一个文件夹下。
             pos_index = np.argwhere(np.asarray(self.real_labels) == np.asarray(self.real_labels[IR_pivot_idx_all[k]])).flatten()
+            #　剔除index．
             pos_index = np.setdiff1d(pos_index, index)
-            pos_index = pos_index[np.random.permutation(len(pos_index))]
+            # 打乱图像索引顺序
+            pos_index = pos_index[np.random.permutation(len(pos_index))] # 得到和中心图像不同类的图像编号。
             if_find = False
-            cnt = 0
+            cnt = 0 
             cnt_yes = 0
-            pos_same_cam = [IR_pivot_idx_all[k]]
+            pos_same_cam = [IR_pivot_idx_all[k]]# 记录当前红外轴图像。
             if k == 0:
-                pos_diff_modal = [RGB_pivot_idx]
+                pos_diff_modal = [RGB_pivot_idx]# 记录可见光轴图像。
             else:
                 pos_diff_modal = []
             while cnt_yes != 2:
+                # 判断当前红外轴图像　和　相同类的图像（IR和RGB）　是红外图形还是可见光图像。
+
+                # 如果当前图像是RGB图像。 opt.samp_pos = 2
                 if (self.modals[pos_index[cnt]] != self.modals[selected_idx]): # diff modal
                     if len(pos_diff_modal) < self.opt.samp_pos:
-                        pos_diff_modal.append(int(pos_index[cnt]))
+                        pos_diff_modal.append(int(pos_index[cnt]))# 记录同类的RGB图像序号。
                         if len(pos_diff_modal) == self.opt.samp_pos:
                             cnt_yes += 1
+                # 如果当前图像是RGB图像。
                 elif self.modals[pos_index[cnt]] == self.modals[selected_idx]: # same modal
                     if len(pos_same_cam) < self.opt.samp_pos:
-                        pos_same_cam.append(int(pos_index[cnt]))
+                        pos_same_cam.append(int(pos_index[cnt]))# 记录同类的IR图像序号。
                         if len(pos_same_cam) == self.opt.samp_pos:
                             cnt_yes += 1
                 cnt += 1
-            one_set.extend(pos_diff_modal)
-            one_set.extend(pos_same_cam)
-            selected_pos_index.extend(one_set)
-
+            one_set.extend(pos_diff_modal)# 记录同类RGB图像序号。
+            one_set.extend(pos_same_cam)# 记录同类IR图像序号。
+            selected_pos_index.extend(one_set)# 记录同类的IR,RGB图像序号。共计8张图像。
+            #分别是红外1类对应的 2个同类RGB图像，2个同类IR图像。  红外2类对应的2个同类RGB图象，2个同类IR图像。
         for i in range(len(selected_pos_index)):
-            selected_pos_path.append(self.samples[selected_pos_index[i]][0])
+            selected_pos_path.append(self.samples[selected_pos_index[i]][0])#记录每个图像的路径。
         # for i in range(len(selected_pos_index)):
         #     print('modal: {}, ID: {}, cam: {}'.format(self.modals[selected_pos_index[i]], self.real_labels[selected_pos_index[i]],
         #                                             self.cams[selected_pos_index[i]]))
@@ -273,8 +284,8 @@ class PosNegSampler(datasets.ImageFolder):
     def __getitem__(self, index): # 这个函数定义了如何对数据集合进行数据的调用
         ori_path, order = self.samples[index]  #　这里的order应该是按照顺序索引文件夹　得到的序号。
         real_label = self.real_labels[index]   # 获得图片的真实标签。
-        cam = self.cams[index]
-        modal = self.modals[index]
+        cam = self.cams[index]#获得相机的编号。
+        modal = self.modals[index]# 获得图像模态编号。
         attribute = {'order':order, 'label':real_label, 'cam':cam, 'modal':modal}
         ori = self.loader(ori_path)  # 加载图像。 PIL格式。
         if self.transform is not None:
@@ -282,7 +293,7 @@ class PosNegSampler(datasets.ImageFolder):
 
         if self.num_pos > 0:
             if 'P_PAIR' in self.name_samping:
-                pos_path, pos_index = self._get_pair_pos_sample(index)
+                pos_path, pos_index = self._get_pair_pos_sample(index)# 获得index所在类的2张RGB图像和2张红外图像。以及和index不同类的2张RGB图像和2张红外图像。
             else:
                 pos_path, pos_index = self._get_pos_sample(index)
             pos_cam = []
@@ -394,10 +405,10 @@ def get_attribute(data_flag, img_samples, flag):
         change_set = [[1, 0], [2, 0], [4, 1], [5, 1], [3, 2], [6, 3]]
     elif flag == 3:  # X = X - 1
         change_set = [[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 5]]
-    elif flag == 0:  # [1,2,4,5]->1, [3,6]->0
+    elif flag == 0:  # [1,2,4,5]->1, [3,6]->0  
         change_set = [[1, 1], [2, 1], [3, 0], [4, 1], [5, 1], [6, 0]]
     for i in range(len(change_set)): # 如下代码，实际使用并没有起到实际作用。
-        cams[np.where(cams == change_set[i][0])[0]] = int(change_set[i][1])
+        cams[np.where(cams == change_set[i][0])[0]] = int(change_set[i][1])  # 把多余的相机的编号进行赋值。
     cams = list(cams)
 
     return cams, labels, modals

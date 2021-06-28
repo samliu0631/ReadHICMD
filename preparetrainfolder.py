@@ -4,7 +4,7 @@ from shutil import copyfile
 #download_path      = 'E:/WorkSpace/Data/HICMDDownload/data/RegDB_01'
 download_path      = '/home/tianyu/code/SamWorkSpace/HiCMD-master/data/SYSU'
 Train_path         = download_path + '/train_all'
-TrainRGB_save_path = download_path + '/trian_all_RGB'
+TrainRGB_save_path = download_path + '/train_all_RGB'
 TrainIR_save_path  = download_path + '/train_all_IR'
 
 if not os.path.isdir(TrainRGB_save_path):
