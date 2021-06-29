@@ -348,8 +348,11 @@ class PosNegSampler(datasets.ImageFolder):
         # opt.neg_mini_batch 
         # self.num_neg = opt.samp_neg = 1 
         if self.num_neg > 0:
-            if 'N_PAIR' in self.name_samping:# pos_label:8个图像的标签数据，tensor类型
-                neg_path, neg_index = self._get_pair_neg_sample(pos_label, pos_cam[self.opt.samp_pos].item())
+            if 'N_PAIR' in self.name_samping:
+                # self.name_sampling = 'P_PAIR,N_PAIR' 
+                # pos_label: 8个标签组成的tensor。 self.opt.samp_pos = 2
+                neg_path, neg_index = self._get_pair_neg_sample(pos_label, pos_cam[self.opt.samp_pos].item() )
+                # 只有单一元素的tensor才可以使用.item()获得元素值。
             else:
                 neg_path, neg_index = self._get_neg_sample(index)
 
@@ -392,7 +395,7 @@ class PosNegSampler(datasets.ImageFolder):
 
         # pos = torch.cat((pos0.view(1,c,h,w), pos1.view(1,c,h,w), pos2.view(1,c,h,w), pos3.view(1,c,h,w)), 0)
         return ori, pos, neg, attribute, attribute_pos, attribute_neg
-
+        # 这个就是dataloader一次加载的数据，且应为batch=1，所以这个返回结果就是
 
 def get_attribute(data_flag, img_samples, flag):
     # data_flag:   a  number，用来表示对那个数据集合进行操作。
