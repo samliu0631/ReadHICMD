@@ -4,7 +4,7 @@ log/
 model/
 pretrained/
 .idea/
-.vscode/
+.vscode/settings.json
 __pycache__/
 features.pt
 features_RegDB.pt
@@ -15,3 +15,4 @@ features_SYSU_IR.pt
 features_SYSU_RGB.pt
 Label_SYSU_IR.pt
 Label_SYSU_RGB.pt
+.data_sampler.py.swp

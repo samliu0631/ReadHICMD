@@ -3,6 +3,7 @@ import os
 import numpy as np
 import random
 import torch
+import pdb
 
 class PosNegSampler(datasets.ImageFolder):
 
@@ -286,7 +287,8 @@ class PosNegSampler(datasets.ImageFolder):
 
 
     def __getitem__(self, index):       # 这个函数定义了如何对数据集合进行数据的调用
-        ori_path, order = self.samples[index]  #　这里的order应该是按照顺序索引文件夹　得到的序号。
+        pdb.set_trace()
+	ori_path, order = self.samples[index]  #　这里的order应该是按照顺序索引文件夹　得到的序号。
         real_label = self.real_labels[index]   # 获得图片的真实标签。
         cam = self.cams[index]#获得相机的编号。
         modal = self.modals[index]# 获得图像模态编号。
