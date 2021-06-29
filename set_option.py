@@ -54,7 +54,7 @@ def opt_model(opt):
     opt.skip_last_batch = False
     opt.train_all = True
     opt.type_domain_label = 0
-    opt.train_batchsize = 1 # do not change
+    opt.train_batchsize = 1 # do not change   # 这里面都设置好了，batchsize为1。
     opt.pos_mini_batch = 2 # do not change
     opt.neg_mini_batch = 2 # do not change
     opt.samp_pos = 2 # do not change

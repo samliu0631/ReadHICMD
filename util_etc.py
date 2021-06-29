@@ -365,8 +365,9 @@ def data_settings(opt):
         old_train_dataloader = dataloaders[opt.phase_train]
     else:
         old_train_dataloader = []
+    # 在训练阶段，对train_all对应的数据集合和加载器进行初始化。
     for x in opt.phase_data:
-        if not x in ['query', 'gallery']:#　这里面train_all数据集合中使用的是PosNegSampleｒ
+        if not x in ['query', 'gallery']:#　这里面train_all数据集合中使用的是PosNegSampler
             image_datasets[x] = PosNegSampler(os.path.join(opt.data_dir, opt.data_name, x), data_transforms[x], data_flag = opt.data_flag,
                                               name_samping = opt.name_samping, num_pos = opt.samp_pos, num_neg = opt.samp_neg, opt=opt)
             dataloaders[x] = torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.set_batchsize[x], shuffle=opt.set_shuffle[x],

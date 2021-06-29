@@ -193,9 +193,9 @@ class HICMD(nn.Module):
 
         pos_all = pos[0]                            # pos_all:  维度8×3×256×128， 所以共计有8个分组。(the first and only element in pos)
         pos_label_all = attribute_pos['order'][0]   # 维度 8维向量。  用图片所在文件夹名称 表示编号。
-        pos_cam_all = attribute_pos['cam'][0]       # 8维向量。
+        pos_cam_all   = attribute_pos['cam'][0]       # 8维向量。
         pos_modal_all = attribute_pos['modal'][0]   # 8维向量。
-        num_pos = pos_all.size(0)                   # num_pos = 8 .
+        num_pos       = pos_all.size(0)                   # num_pos = 8 .
 
         pos_a1_idx = [x for x in range(num_pos) if x % 4 == 0]   # pos_a1_idx = [0 4]      # num_pos =8. range(num_pos): 0 1 2 3 4 5 6 7
         pos_a2_idx = [x for x in range(num_pos) if x % 4 == 1]   # pos_a2_idx = [1,5]
