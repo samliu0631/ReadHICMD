@@ -3,7 +3,7 @@ import os
 import numpy as np
 import random
 import torch
-import pdb
+
 
 class PosNegSampler(datasets.ImageFolder):
 
@@ -189,9 +189,9 @@ class PosNegSampler(datasets.ImageFolder):
         return selected_pos_path, selected_pos_index
 
     def _get_pair_neg_sample(self, pos_label, pos_cam):
-
-        used_label = list(set(pos_label.tolist()))
-        rand_idx = np.random.permutation(len(self.real_labels))
+        # pos_label:8个图像的标签，tensor类型。 pos_cam:0 相机的类型。
+        used_label = list(set(pos_label.tolist())) # 使用set()可以去掉重复的元素。 这里表示使用的类型标签。
+        rand_idx = np.random.permutation(len(self.real_labels))# 生成打乱后的 图像序号 列表。
 
         IR_idx_all = []
         RGB_idx_all = []
@@ -199,10 +199,10 @@ class PosNegSampler(datasets.ImageFolder):
 
         is_find = False
         while not is_find:
-            selected_idx = int(rand_idx[cnt])
-            selected_label = self.real_labels[selected_idx]
+            selected_idx = int(rand_idx[cnt])               # 遍历乱序图像序号 中的一个。
+            selected_label = self.real_labels[selected_idx] # 获得当前图像的标签。
             if not self.real_labels[selected_idx] in used_label:
-
+                # 如果
                 if self.modals[selected_idx] == 1: # RGB
                     if len(RGB_idx_all) < self.opt.neg_mini_batch:
                         RGB_idx_all.append(selected_idx)
@@ -287,8 +287,7 @@ class PosNegSampler(datasets.ImageFolder):
 
 
     def __getitem__(self, index):       # 这个函数定义了如何对数据集合进行数据的调用
-        pdb.set_trace()
-	ori_path, order = self.samples[index]  #　这里的order应该是按照顺序索引文件夹　得到的序号。
+        ori_path, order = self.samples[index] #这里的order应该是按照顺序索引文件夹　得到的序号。
         real_label = self.real_labels[index]   # 获得图片的真实标签。
         cam = self.cams[index]#获得相机的编号。
         modal = self.modals[index]# 获得图像模态编号。
@@ -299,7 +298,7 @@ class PosNegSampler(datasets.ImageFolder):
 
         # self.num_pos= opt.samp_pos = 2
         if self.num_pos > 0:
-            if 'P_PAIR' in self.name_samping:
+            if 'P_PAIR' in self.name_samping:# self.name_samping=['P_PAIR','N_PAIR']
                 pos_path, pos_index = self._get_pair_pos_sample(index)
                 # 获得index所在类的2张RGB图像和2张红外图像。以及和index不同类的2张RGB图像和2张红外图像。
             else:
@@ -315,13 +314,13 @@ class PosNegSampler(datasets.ImageFolder):
                 pos_order.append(self.samples[pos_index[i]][1]) # 获得图像对应类别索引
                 pos_label.append(self.real_labels[pos_index[i]])# 获取图像的标签号
 
-            pos_image = [0 for _ in range(len(pos_index))]
+            pos_image = [0 for _ in range(len(pos_index))] # 定义一个8*1的全零list变量。
             for i in range(len(pos_index)):
-                pos_image[i] = self.loader(pos_path[i])# 加载图像。
+                pos_image[i] = self.loader(pos_path[i])# 向列表中逐个加载PIL格式图像。
 
             if self.transform is not None:
                 for i in range(len(pos_index)):
-                    pos_image[i] = self.transform(pos_image[i]) #对图像进行变换，转换为tensor类型。
+                    pos_image[i] = self.transform(pos_image[i]) #对图像进行变换，转换为tensor类型。仍然是列表
 
             if self.target_transform is not None:
                 pass
@@ -329,11 +328,11 @@ class PosNegSampler(datasets.ImageFolder):
 
             c,h,w = pos_image[0].shape # 获取图像的通道数，高度，宽度。
             for i in range(len(pos_index)):
-                pos_image[i] = pos_image[i].view(1,c,h,w) # view()函数用来调整图像的维度。
+                pos_image[i] = pos_image[i].view(1,c,h,w) # view()函数用来调整图像的维度。1*3*256*128
             pos = pos_image[0]
             # 将8个tensor变量整合到一个tensor中。
             for i in range(len(pos_index)-1):
-                pos = torch.cat((pos, pos_image[i+1]), 0) # 将tensor按行进行拼接。
+                pos = torch.cat((pos, pos_image[i+1]), 0) # 将tensor按行进行拼接。pos：8*3*256*128维tensor
             pos_order = torch.as_tensor(pos_order) # 将变量类型转换为tensor
             pos_label = torch.as_tensor(pos_label)
             pos_cam = torch.as_tensor(pos_cam)
@@ -349,7 +348,7 @@ class PosNegSampler(datasets.ImageFolder):
         # opt.neg_mini_batch 
         # self.num_neg = opt.samp_neg = 1 
         if self.num_neg > 0:
-            if 'N_PAIR' in self.name_samping:
+            if 'N_PAIR' in self.name_samping:# pos_label:8个图像的标签数据，tensor类型
                 neg_path, neg_index = self._get_pair_neg_sample(pos_label, pos_cam[self.opt.samp_pos].item())
             else:
                 neg_path, neg_index = self._get_neg_sample(index)
