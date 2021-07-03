@@ -26,7 +26,7 @@ class PosNegSampler(datasets.ImageFolder):
         return int(camera_id)-1
 
     def _get_pair_pos_sample(self, index):
-        # 找到和index 同一个类的图像 序号（　剔除index　）###################################################
+        # 找到和index 同一个类的图像 序号（剔除index）###################################################
         pos_index = np.argwhere(np.asarray(self.real_labels) == np.asarray(self.real_labels[index]))
         pos_index = pos_index.flatten()     # 降到1维。
         pos_index = np.setdiff1d(pos_index, index) # delete index 删除当前index图像。
@@ -188,6 +188,7 @@ class PosNegSampler(datasets.ImageFolder):
 
         return selected_pos_path, selected_pos_index
 
+    # 得到和pos不同类的两张RGB图像和两张IR图像。
     def _get_pair_neg_sample(self, pos_label, pos_cam):
         # pos_label:8个图像的标签，tensor类型。 pos_cam:0 相机的类型。
         used_label = list(set(pos_label.tolist())) # 使用set()可以去掉重复的元素。 这里表示使用的类型标签。
@@ -201,32 +202,34 @@ class PosNegSampler(datasets.ImageFolder):
         while not is_find:
             selected_idx = int(rand_idx[cnt])               # 遍历乱序图像序号 中的一个。
             selected_label = self.real_labels[selected_idx] # 获得当前图像的标签。
-            if not self.real_labels[selected_idx] in used_label:
-                # 如果
-                if self.modals[selected_idx] == 1: # RGB
+            if not self.real_labels[selected_idx] in used_label: 
+                # 如果当前图形 不在used_label中
+                if self.modals[selected_idx] == 1: # RGB 如果当前图像是RGB图像。
                     if len(RGB_idx_all) < self.opt.neg_mini_batch:
-                        RGB_idx_all.append(selected_idx)
-                        used_label.append(selected_label)
-                elif self.modals[selected_idx] == 0: # IR
-                    if len(IR_idx_all) < self.opt.neg_mini_batch:
-                        IR_idx_all.append(selected_idx)
-                        used_label.append(selected_label)
+                        RGB_idx_all.append(selected_idx)   # 添加RGB图像序号。
+                        used_label.append(selected_label)  # 在used_label中记录添加图像的标签。
+                elif self.modals[selected_idx] == 0: # IR 如果当前图像是IR图像。
+                    if len(IR_idx_all) < self.opt.neg_mini_batch: 
+                        IR_idx_all.append(selected_idx)    # 添加IR图像序号。
+                        used_label.append(selected_label)  # 在used_label中记录添加图像的标签。
 
             if (len(RGB_idx_all) == self.opt.neg_mini_batch) and (len(IR_idx_all) == self.opt.neg_mini_batch):
+                # 如果找到2张RGB图像和2张IR图像。
                 is_find = True
             cnt += 1
         selected_neg_index = []
-        selected_neg_index.extend(RGB_idx_all)
-        selected_neg_index.extend(IR_idx_all)
+        selected_neg_index.extend(RGB_idx_all) # 添加RGB图像序号
+        selected_neg_index.extend(IR_idx_all)  # 添加IR图像序号。
 
         selected_neg_path = []
         for i in range(len(selected_neg_index)):
-            selected_neg_path.append(self.samples[selected_neg_index[i]][0])
+            selected_neg_path.append(self.samples[selected_neg_index[i]][0]) # 获得图像的路径。
         # for i in range(len(selected_neg_index)):
         #     print('modal: {}, ID: {}, cam: {}'.format(self.modals[selected_neg_index[i]], self.real_labels[selected_neg_index[i]],
         #                                             self.cams[selected_neg_index[i]]))
 
         return selected_neg_path, selected_neg_index
+        # 返回负向示例图像的路径和索引号。
 
 
     def _get_neg_sample(self, index):
@@ -343,8 +346,6 @@ class PosNegSampler(datasets.ImageFolder):
             pos = []
             attribute_pos = {}
 
-
-
         # opt.neg_mini_batch 
         # self.num_neg = opt.samp_neg = 1 
         if self.num_neg > 0:
@@ -361,18 +362,18 @@ class PosNegSampler(datasets.ImageFolder):
             neg_order = []
             neg_label = []
             for i in range(len(neg_index)):
-                neg_cam.append(self.cams[neg_index[i]])
-                neg_modal.append(self.modals[neg_index[i]])
-                neg_order.append(self.samples[neg_index[i]][1])
-                neg_label.append(self.real_labels[neg_index[i]])
+                neg_cam.append(self.cams[neg_index[i]])          # 向列表变量中添加相机类型
+                neg_modal.append(self.modals[neg_index[i]])      # 向列表变量中添加图像模态
+                neg_order.append(self.samples[neg_index[i]][1])  # 向列表变量中添加图像类别索引号
+                neg_label.append(self.real_labels[neg_index[i]]) # 向列表变量中添加图像类别标签
 
             neg_image = [0 for _ in range(len(neg_index))]
             for i in range(len(neg_index)):
-                neg_image[i] = self.loader(neg_path[i])
+                neg_image[i] = self.loader(neg_path[i])          # 读取图像为PIL格式。
 
             if self.transform is not None:
                 for i in range(len(neg_index)):
-                    neg_image[i] = self.transform(neg_image[i])
+                    neg_image[i] = self.transform(neg_image[i])  # 将图像转换为tensor格式。
 
             if self.target_transform is not None:
                 pass
@@ -396,6 +397,12 @@ class PosNegSampler(datasets.ImageFolder):
         # pos = torch.cat((pos0.view(1,c,h,w), pos1.view(1,c,h,w), pos2.view(1,c,h,w), pos3.view(1,c,h,w)), 0)
         return ori, pos, neg, attribute, attribute_pos, attribute_neg
         # 这个就是dataloader一次加载的数据，且应为batch=1，所以这个返回结果就是
+        # ori:Index对应图像生成的tensor。  
+        # pos：8*3*256*128维的图像tensor。 
+        # neg:4*3*256*128的图像tensor。
+        # attribute: index对应图像的标签信息。
+        # attribute_pos: 8张正向示例图像的标签等信息
+        # attribute_neg: 负向示例图像的标签等信息。
 
 def get_attribute(data_flag, img_samples, flag):
     # data_flag:   a  number，用来表示对那个数据集合进行操作。

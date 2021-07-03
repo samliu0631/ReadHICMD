@@ -181,31 +181,33 @@ class HICMD(nn.Module):
 
     def go_train(self, data, opt, phase, cnt, epoch):
         # data:一共6个元素，每个元素的尺度是 1×3×256×128
-        # Batch sampler
-        if phase in opt.phase_train:    # 如果 phase== "train_all"
+        # Batch sampler 在训练阶段 opt.phase_train = "train_all"
+        if phase in opt.phase_train:    # 如果 phase是"train_all"
             self.cnt_cumul += 1         # 训练次数累加计数。
         pred_labels = f = pf = nf = []  # initialize 初始化为空的列表。
         _, pos, neg, attribute, attribute_pos, attribute_neg, labels = self.data_variable(opt, data)   # 从输入数据中分离出不同的变量类型。
         # pos表示正面例子  neg表示反面例子。
-
-        self.is_pos = True if len(pos) > 0 else False  # is_pos用来判断 是否存在有效的pos    pos.shape = 1*8*3*256*128
-        self.is_neg = True if len(neg) > 0 else False  # is_neq用来判断 是否存在有效的neg。  neg.shape = 1*4*3*256*128
+        # 这里用_表示index对应的图像，说明后续并不使用。
+        self.is_pos = True if len(pos) > 0 else False  
+        # is_pos用来判断 是否存在有效的pos    pos.shape = 1*8*3*256*128
+        self.is_neg = True if len(neg) > 0 else False  
+        # is_neq用来判断 是否存在有效的neg。  neg.shape = 1*4*3*256*128
 
         pos_all = pos[0]                            # pos_all:  维度8×3×256×128， 所以共计有8个分组。(the first and only element in pos)
         pos_label_all = attribute_pos['order'][0]   # 维度 8维向量。  用图片所在文件夹名称 表示编号。
-        pos_cam_all   = attribute_pos['cam'][0]       # 8维向量。
+        pos_cam_all   = attribute_pos['cam'][0]     # 8维向量。
         pos_modal_all = attribute_pos['modal'][0]   # 8维向量。
-        num_pos       = pos_all.size(0)                   # num_pos = 8 .
+        num_pos       = pos_all.size(0)             # num_pos = 8 .
+        # num_pos =8. range(num_pos): 0 1 2 3 4 5 6 7
+        pos_a1_idx = [x for x in range(num_pos) if x % 4 == 0]   # pos_a1_idx = [0 4] 两个不同类的RGB图像。
+        pos_a2_idx = [x for x in range(num_pos) if x % 4 == 1]   # pos_a2_idx = [1,5] 两个不同类的RGB图像。
+        pos_b1_idx = [x for x in range(num_pos) if x % 4 == 2]   # pos_b1_idx = [2,6] 两个不同类的IR图像
+        pos_b2_idx = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7] 两个不同类的IR图像。
 
-        pos_a1_idx = [x for x in range(num_pos) if x % 4 == 0]   # pos_a1_idx = [0 4]      # num_pos =8. range(num_pos): 0 1 2 3 4 5 6 7
-        pos_a2_idx = [x for x in range(num_pos) if x % 4 == 1]   # pos_a2_idx = [1,5]
-        pos_b1_idx = [x for x in range(num_pos) if x % 4 == 2]   # pos_b1_idx = [2,6]
-        pos_b2_idx = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7]
-
-        x_a1 = pos_all[pos_a1_idx]    # 获取pos_all中 第0,4个元素。   这个x_a1, x_a2 表示的是3*256*128的图像。和文献第4章对应。
-        x_a2 = pos_all[pos_a2_idx]    # 获取pos_all中 第1,5的元素。  对于正向例子，每个是2张图。
-        x_b1 = pos_all[pos_b1_idx]    # 获取pos_all中 第2,6的元素。
-        x_b2 = pos_all[pos_b2_idx]    # 获取pos_all中 第3,7的元素。
+        x_a1 = pos_all[pos_a1_idx]    # 两个不同类的RGB图像。 获取pos_all中 第0,4个元素。2*3*256*128的tensor   这个x_a1, x_a2 表示的是3*256*128的图像。和文献第4章对应。
+        x_a2 = pos_all[pos_a2_idx]    # 两个不同类的RGB图像。 获取pos_all中 第1,5的元素。  对于正向例子，每个是2张图。
+        x_b1 = pos_all[pos_b1_idx]    # 两个不同类的IR图像。  获取pos_all中 第2,6的元素。
+        x_b2 = pos_all[pos_b2_idx]    # 两个不同类的IR图像。  获取pos_all中 第3,7的元素。
 
         labels_a1 = pos_label_all[pos_a1_idx]    # 获取pos_label_all中 第0,4的元素。    这里的label对应标签，也就是图片所在文件夹的编号。
         labels_a2 = pos_label_all[pos_a2_idx]    # 获取pos_label_all中 第1,5的元素。
@@ -223,17 +225,17 @@ class HICMD(nn.Module):
         cams_b2 = pos_cam_all[pos_b2_idx]
 
         if self.is_neg:              # 如果存在有效的neg则进行赋值，否则置为空列表。
-            neg_all = neg[0]         # neg例子对应的是4张
+            neg_all = neg[0]         # neg例子对应的是4张 4*3*256*128 的tensor
             neg_label_all = attribute_neg['order'][0]    # 获取负样本的标签数据。 neg_label_all
             neg_cam_all = attribute_neg['cam'][0]        # 获得负样本的相机标签数据。
             neg_modal_all = attribute_neg['modal'][0]    # 获得负样本的模态数据。
             num_neg = neg_all.size(0)                    # 负样本的数量。
             neg_a_idx = [x for x in range(num_neg) if x < opt.neg_mini_batch]   # 根据opt.neg_mini_batch将负样本一分为二 。
             neg_b_idx = [x for x in range(num_neg) if x >= opt.neg_mini_batch]
-            neg_a = neg_all[neg_a_idx] # 对应的是2张
-            neg_b = neg_all[neg_b_idx] # 对应的是2张。
-            self.labels_neg_a = neg_label_all[neg_a_idx]   
-            self.labels_neg_b = neg_label_all[neg_b_idx]
+            neg_a = neg_all[neg_a_idx] # 对应的是2张RGB图像 tensor  2*3*256*128
+            neg_b = neg_all[neg_b_idx] # 对应的是2张IR图像 tensor   2*3*256*128
+            self.labels_neg_a = neg_label_all[neg_a_idx]   # 获取前两张RGB图像的类别标签。
+            self.labels_neg_b = neg_label_all[neg_b_idx]   # 获取后两张IR图像的类别标签。
         else:
             neg_a = []
             neg_b = []
@@ -252,7 +254,8 @@ class HICMD(nn.Module):
                 opt.apply_pos_cnt = opt.old_apply_pos_cnt  # 执行这一句．
         else:
             opt.old_apply_pos_cnt = opt.apply_pos_cnt
-
+        
+        # opt.apply_pos_cnt = 1000000
         # Same-modality (not used)
         if (opt.apply_pos_cnt > 0) or (opt.cnt_initialize_pos >= self.cnt_cumul):
             if (self.cnt_cumul != 1 and (self.cnt_cumul % opt.apply_pos_cnt == 0)) or (opt.cnt_initialize_pos >= self.cnt_cumul):
@@ -280,16 +283,22 @@ class HICMD(nn.Module):
 
         # Cross-modality  跨域训练。
         if (opt.cnt_initialize_pos < self.cnt_cumul):
-            self.labels_a = labels_a1    # 对label 进行赋值  two labels of two RGB images.
-            self.labels_b = labels_b1    # two lables of IR images.
-            self.modals_a = modals_a1    # 对modal进行赋值
-            self.modals_b = modals_b1
+            self.labels_a = labels_a1    # 两个不同类的RGB图像类别标签
+            self.labels_b = labels_b1    # 两个不同类的IR图像。
+            self.modals_a = modals_a1    # 两个RGB图像的模态 1 1 
+            self.modals_b = modals_b1    # 两个IR图像的模态 0 0 
             self.cams_a = cams_a1        # 对cam进行赋值
             self.cams_b = cams_b1
-            self.case_a = case_a1        # 'RGB'
+            self.case_a = case_a1        # 'RGB' case_a对应的是RGB图像。
             self.case_b = case_b1        # 'IR'
-            self.dis_update(x_a1, x_b1, opt, phase)                 # x_a1  x_b1都是2张图片。
+            self.dis_update(x_a1, x_b1, opt, phase)  
+            # x_a1:  2张RGB图像 tensor。   
+            # x_b1:  2张IR 图像 tensor。
+            # neg_a: 2张RGB图像 tensor。
+            # neg_b: 2张IR 图像 tensor。
+            # phase：在训练阶段是"train_all"。
             self.gen_update(x_a1, x_b1, neg_a, neg_b, opt, phase)   # 对整个模型进行更新。
+
 
         # 存储损失函数结果。
         for key, value in self.loss_type.items():
@@ -429,18 +438,22 @@ class HICMD(nn.Module):
 
 
     def gen_update(self, x_a, x_b, neg_a, neg_b, opt, phase):
-
+        # x_a:   2张RGB图像 tensor。   
+        # x_b:   2张IR 图像 tensor。
+        # neg_a: 2张RGB图像 tensor。
+        # neg_b: 2张IR 图像 tensor。
+        # phase：在训练阶段是"train_all"。
         # 这个函数是go_train中主要调用的函数。   这里的x_a，x_b都是两张图。
         if self.case_a == 'RGB':
-            self.dis_a = self.dis_RGB     # RGB图像的鉴别器。
-            self.gen_a = self.gen_RGB     # RGB图像的图像生成器。
+            self.dis_a = self.dis_RGB # RGB图像的鉴别器。 这里是浅拷贝。相当于贴了标签。
+            self.gen_a = self.gen_RGB # RGB图像的图像生成器。
         elif self.case_a == 'IR':
-            self.dis_a = self.dis_IR      # IR图像的鉴别器。
-            self.gen_a = self.gen_IR 
+            self.dis_a = self.dis_IR  # IR图像的鉴别器。
+            self.gen_a = self.gen_IR  # IR图像的图像生成器。
         else:
             assert(False)
 
-
+        # 这一步骤的作用是，为了使得代码具有通用性，能够处理RGB或IR图像顺序不同的情况。
         if self.case_b == 'RGB':
             self.dis_b = self.dis_RGB
             self.gen_b = self.gen_RGB
@@ -463,7 +476,7 @@ class HICMD(nn.Module):
         else:
             Do_gen_update = True
             Do_id_update = True
-
+        # 训练过程中，Do_gen_update和Do_id_update 都始终为True。
 
         ##########################################################################
         # ID-PIG (ID-preserving Person Image Generation)
@@ -473,63 +486,79 @@ class HICMD(nn.Module):
                 Gx_a = self.single(x_a.clone())
                 Gx_b = self.single(x_b.clone())
             else:
-                Gx_a = x_a  #这里的图像都是两张。
+                Gx_a = x_a  # 这里的图像都是两张。
                 Gx_b = x_b
 
-            Gx_a_raw = Gx_a.clone()    # 对输入图像进行复制
-            Gx_b_raw = Gx_b.clone()    # 对输入图像进行复制。
+            Gx_a_raw = Gx_a.clone()    # 对输入图像进行复制 深拷贝。 2*3*256*128
+            Gx_b_raw = Gx_b.clone()    # 对输入图像进行复制 深拷贝   2*3*256*128
 
             if self.zero_grad_G:
-                self.gen_optimizer.zero_grad()
-                self.zero_grad_G = False
+                self.gen_optimizer.zero_grad() # 将梯度清零。
+                self.zero_grad_G = False       # 将清零标志置为False。
 
-            c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码 生成原型编码c_a。  2 * 256 * 64 * 32
-            c_b = self.gen_b.enc_pro(Gx_b)     # 利用原型编码器 进行编码 生成原型编码c_b。
-            s_a = self.gen_a.enc_att(Gx_a)     # 利用属性编码器 进行编码 生成属性编码s_a。
-            s_b = self.gen_b.enc_att(Gx_b)     # 生成属性编码s_b
-            s_a_id = s_a.clone()     # 对属性编码 s_a 进行复制。
-            s_b_id = s_b.clone()     # 对属性编码 s_b 进行复制。
+            # 这其中Gx_a和Gx_b的图像类型索引是对应的。
+            c_a = self.gen_a.enc_pro(Gx_a)  # 2*256*64*32 tensor 利用原型编码器 进行编码 生成原型编码c_a。  
+            c_b = self.gen_b.enc_pro(Gx_b)  # 2*256*64*32 tensor 利用原型编码器 进行编码 生成原型编码c_b。
+            s_a = self.gen_a.enc_att(Gx_a)  # 2*2048 tensor 利用属性编码器 进行编码 生成属性编码s_a。
+            s_b = self.gen_b.enc_att(Gx_b)  # 2*2048 tensor 生成属性编码s_b。
+            s_a_id = s_a.clone()            # 对属性编码 s_a 进行 深拷贝。
+            s_b_id = s_b.clone()            # 对属性编码 s_b 进行 深拷贝。
 
-            s_a2 = s_a.clone()    # 
+            s_a2 = s_a.clone()     
             s_b2 = s_b.clone()
-            s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)   # 交换两个属性编码形成 新的属性编码. style-idx：0-255,  512-767, 1024-1279, 1536-1791
-            # att_ex_idx:   256-511, 768-1023, 1280-1535, 1792-2047
+            s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)   # 交换两个属性编码形成 新的属性编码. 
+            # s_a:包含Gx_a的ID无关编码 和 Gx_b的风格属性编码
+            # s_b:包含Gx_b的ID无关编码 和 Gx_a的风格属性编码。
+            # self.att_style-idx： 0-255,  512-767, 1024-1279, 1536-1791   对应的是风格属性编码
+            # self.att_ex_idx: 256-511, 768-1023, 1280-1535, 1792-2047。   对应的是id无关的属性编码
             # 进行属性编码的交换。 
-            x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 生成图像Xb->a，这里是两张一起生成。
-            x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   # 生成图像Xa->a 。
+            x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        
+            # 生成图像Xb->a。 根据Gx_b的风格属性和原型编码 和 Gx_a的ID无关编码(光照和姿态)
+            x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   
+            # 生成图像Xa->a 。根据Gx_a的ID无关编码 和原型编码； Gx_b的风格属性编码(ID相关)：同ID的RGB/IR图像，该值应相等
 
-            x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        # 生成图像Xa->b。
-            x_b_recon = self.gen_b.dec(c_b, s_b, self.gen_b.enc_pro.output_dim)   # 生成图像Xb->b。
+            x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        
+            # 生成图像Xa->b。 根据Gx_a的原型编码和风格属性编码  Gx_b的ID无关编码(光照和姿态)。
+            x_b_recon = self.gen_b.dec(c_b, s_b, self.gen_b.enc_pro.output_dim)   
+            # 生成图像Xb->b。 根据Gx_b的原型编码和 ID无关编码； Gx_a的风格属性编码(ID相关)：同ID的RGB/IR图像，该值应相等。
 
-            x_ba_raw = x_ba.clone()
-            x_ab_raw = x_ab.clone()
+            x_ba_raw = x_ba.clone()  # 进行深拷贝。
+            x_ab_raw = x_ab.clone()  # 进行深拷贝。
 
             if Do_gen_update:
-                c_b_recon = self.gen_a.enc_pro(x_ba)     # 对Xba提取  原型编码, 得到原型编码 c_b_recon
-                c_a_recon = self.gen_b.enc_pro(x_ab)     # 对Xab提取  原型编码, 得到原型编码 c_a_recon
-                s_a_recon = self.gen_a.enc_att(x_ba)     # 对Xba提取  属性编码, 得到属性源码 s_a_recon
-                s_b_recon = self.gen_b.enc_att(x_ab)     # 对Xab提取  属性编码, 得到属性源码 s_b_recon.
+                c_b_recon = self.gen_a.enc_pro(x_ba)    
+                 # 对Xba提取  原型编码, 得到原型编码 c_b_recon
+                c_a_recon = self.gen_b.enc_pro(x_ab)     
+                # 对Xab提取  原型编码, 得到原型编码 c_a_recon
+                s_a_recon = self.gen_a.enc_att(x_ba)     
+                # 对Xba提取  属性编码, 得到属性源码 s_a_recon
+                s_b_recon = self.gen_b.enc_att(x_ab)     
+                # 对Xab提取  属性编码, 得到属性源码 s_b_recon.
                 s_a_recon_id = s_a_recon.clone()
                 s_b_recon_id = s_b_recon.clone()
 
                 if opt.w_cycle_x > 0:
-                    x_aba = self.gen_a.dec(c_a_recon, s_a, self.gen_a.enc_pro.output_dim)    # 生成图像Xaba。
-                    x_bab = self.gen_b.dec(c_b_recon, s_b, self.gen_b.enc_pro.output_dim)    # 生成图像Xbab。
+                    x_aba = self.gen_a.dec(c_a_recon, s_a, self.gen_a.enc_pro.output_dim)    
+                    # 生成图像Xaba。
+                    x_bab = self.gen_b.dec(c_b_recon, s_b, self.gen_b.enc_pro.output_dim)    
+                    # 生成图像Xbab。
 
-                # reconstruction loss (same)
-                self.loss_gen_recon_x_a = self.recon_criterion(x_a_recon, Gx_a_raw)
+                # reconstruction loss (same) 重建误差，这个可以用在两张不同id图像
+                self.loss_gen_recon_x_a = self.recon_criterion(x_a_recon, Gx_a_raw) # 返回tensor变量。
                 self.loss_gen_recon_x_b = self.recon_criterion(x_b_recon, Gx_b_raw)
                 self.loss_gen_recon_x = opt.w_recon_x * (self.loss_gen_recon_x_a + self.loss_gen_recon_x_b)
                 self.loss_type['G_rec_x'] = self.loss_gen_recon_x.item() if self.loss_gen_recon_x != 0 else 0
-
-                # reconstruction loss (cross)
+                # tensor.item():将标量tensor转换为一个数。 G_rec_x：Genaratord reconstruction loss
+                
+                # reconstruction loss (cross) 这个必须是相同的ID的两张图像
                 self.loss_gen_cross_x_ab = self.recon_criterion(x_ab_raw, Gx_b_raw)
                 self.loss_gen_cross_x_ba = self.recon_criterion(x_ba_raw, Gx_a_raw)
                 self.loss_gen_cross_x = opt.w_cross_x * (self.loss_gen_cross_x_ab + self.loss_gen_cross_x_ba)
                 self.loss_type['G_cross_x'] = self.loss_gen_cross_x.item() if self.loss_gen_cross_x != 0 else 0
-
-                # reconstruction loss (cycle)
-                if opt.w_cycle_x > 0:
+                # tensor.item():将标量tensor转换为一个数。 G_cross_x:Generator cross reconstruction loss.
+                
+                # reconstruction loss (cycle) 这个可以用在两张不同ID图像。
+                if opt.w_cycle_x > 0:# opt.w_cycle = 50
                     self.loss_gen_cyc_x_a = self.recon_criterion(x_aba, Gx_a_raw)
                     self.loss_gen_cyc_x_b = self.recon_criterion(x_bab, Gx_b_raw)
                 else:
@@ -538,28 +567,43 @@ class HICMD(nn.Module):
                 self.loss_gen_cyc_x = opt.w_cycle_x * (self.loss_gen_cyc_x_a + self.loss_gen_cyc_x_b)
                 self.loss_type['G_cyc_x'] = self.loss_gen_cyc_x.item() if self.loss_gen_cyc_x != 0 else 0
 
-                # attribute code reconstruction loss    下面提取相应的属性和原型编码到对应的向量中。
-                att_style_s_a = torch_gather(s_a_id, self.att_style_idx, 1)                                  # 2个 1024 维度的风格属性编码，ID相关。
-                att_ex_s_a = torch_gather(s_a_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None   # 2个1024维度的ID无关属性编码。
+                # attribute code reconstruction loss ########################################
+                # 下面提取相应的属性和原型编码到对应的向量中。
+                
+                # 提取Gx_a属性编码s_a_id中的 2个 1024 维度的风格属性编码，ID相关。
+                att_style_s_a = torch_gather(s_a_id, self.att_style_idx, 1)   
+                # 提取Gx_a属性编码s_a_id中的 2个1024维度的ID无关属性编码（光照和姿态属性编码）。
+                att_ex_s_a = torch_gather(s_a_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None   
+                # 提取Gx_b属性编码s_b_id中的 2个1024维度的风格属性编码，ID相关。
                 att_style_s_b = torch_gather(s_b_id, self.att_style_idx, 1)
+                # 提取Gx_b属性编码s_b_id中的 2个1024维度的ID无关属性编码（光照和姿态属性编码）
                 att_ex_s_b = torch_gather(s_b_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None
+                # 提取合成图像x_ba 的属性编码s_a_recon_id 中的风格属性编码.id相关
                 att_style_s_a_recon = torch_gather(s_a_recon_id, self.att_style_idx, 1)
+                # 提取合成图像x_ba 的属性编码s_a_recon_id 中的ID无关属性编码（光照和姿态属性编码）
                 att_ex_s_a_recon = torch_gather(s_a_recon_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None
+                # 提取合成图像x_ab 的属性编码s_b_recon_id 中的风格属性编码。
                 att_style_s_b_recon = torch_gather(s_b_recon_id, self.att_style_idx, 1)
+                # 提取合成图像x_ab 的属性编码s_b_recon_id 中的ID无关属性编码。（光照和姿态属性编码）
                 att_ex_s_b_recon = torch_gather(s_b_recon_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None
-
-                self.loss_gen_recon_s = self.recon_criterion(att_ex_s_a, att_ex_s_a_recon)  # 计算L code recon
+                
+                # 计算编码相关的损失函数。
+                # att_ex_s_a: Gx_a的ID无关编码。 att_ex_s_a_recon：x_ba的ID无关编码(Gx_a的ID无关编码)  # 可以用在跨源域目标域训练中。
+                self.loss_gen_recon_s = self.recon_criterion(att_ex_s_a, att_ex_s_a_recon)  
+                # att_ex_s_b：Gx_b的ID无关编码。 att_ex_s_b_recon：x_ab的ID无关编码(Gx_b的ID无关编码)  # 可以用在跨源域目标域训练中。
                 self.loss_gen_recon_s += self.recon_criterion(att_ex_s_b, att_ex_s_b_recon)
-                self.etc_type['S_remain'] = self.loss_gen_recon_s.item()
-
+                self.etc_type['S_remain'] = self.loss_gen_recon_s.item() # 标量tensor可以使用item()提取标量取值。
+                # att_style_s_b: Gx_b的风格属性编码。 att_style_s_a_recon：x_ba的风格属性编码(Gx_b的风格属性)
                 self.loss_gen_recon_s2 = self.recon_criterion(att_style_s_b, att_style_s_a_recon)
+                # att_style_s_a: Gx_a的风格属性编码。 att_style_s_b_recon：x_ab的风格属性编码(Gx_a的风格属性)
                 self.loss_gen_recon_s2 += self.recon_criterion(att_style_s_a, att_style_s_b_recon)
                 self.etc_type['S_ID'] = self.loss_gen_recon_s2.item()
                 self.loss_gen_recon_s += self.loss_gen_recon_s2
                 self.loss_gen_recon_s *= opt.w_recon_s
+                # 存储编码相关的loss
                 self.loss_type['G_rec_s'] = self.loss_gen_recon_s.item() if self.loss_gen_recon_s != 0 else 0
 
-                # KLD loss (attribute code to gaussian distribution)
+                # KLD loss (attribute code to gaussian distribution) #############################
                 self.loss_gen_s_a_kl = self.compute_kl(
                     torch_gather(s_a, self.att_ex_idx, 1)) if opt.w_style_kl != 0 else 0
                 self.loss_gen_s_b_kl = self.compute_kl(
@@ -567,7 +611,7 @@ class HICMD(nn.Module):
                 self.loss_gen_kl = opt.w_style_kl * (self.loss_gen_s_a_kl + self.loss_gen_s_b_kl)
                 self.loss_type['style_kl'] = self.loss_gen_kl.item() if self.loss_gen_kl != 0 else 0
 
-                # GAN loss
+                # GAN loss 这个可以用在不同ID的两个图像中。
                 self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba_raw)
                 self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab_raw)
                 self.loss_gen_adv = opt.w_gan * (self.loss_gen_adv_a + self.loss_gen_adv_b)
@@ -901,9 +945,6 @@ class HICMD(nn.Module):
                 self.acc_type['Trip'] = 0
                 self.etc_type['Trip_reg'] = 0
                 self.etc_type['Trip_margin'] = 0
-
-        
-        
         
         # Update ID-PIG and HFL
         # 这一步骤主要是对ID-PIG和HFL中的参数进行更新。
@@ -1103,6 +1144,7 @@ class HICMD(nn.Module):
 
     def recon_criterion(self, input, target):
         return torch.mean(torch.abs(input - target))
+        # 求两个量的绝对差 的平均值。
 
     def compute_kl(self, mu):
         mu_2 = torch.pow(mu, 2)
@@ -1637,24 +1679,31 @@ class HICMD(nn.Module):
     ##########################################################################################################
 
     def data_variable(self, opt, data):
-        inputs, pos, neg, attribute, attribute_pos, attribute_neg = data # Get the six element of data which is a List.
+        inputs, pos, neg, attribute, attribute_pos, attribute_neg = data 
+        # inputs：       Index对应图像生成的tensor。   1*3*256*128维度的tensor。
+        # pos：          1*8*3*256*128维的图像tensor。 
+        # neg：          1*4*3*256*128的图像tensor。
+        # attribute:     index对应图像的标签信息。   字典变量。
+        # attribute_pos: 8张正向示例图像的标签等信息。字典变量。
+        # attribute_neg: 4张负向示例图像的标签等信息。字典变量。
+        # Get the six element of data which is a List.
         self.b, self.c, self.h, self.w = inputs.shape  #  1*3*256*128
         if self.b == 1:
-            self.b = opt.pos_mini_batch
+            self.b = opt.pos_mini_batch  # self.b=2
         if opt.use_gpu:
-            inputs = Variable(inputs.cuda())
-            if len(pos):
-                pos = Variable(pos.cuda())
+            inputs = Variable(inputs.cuda()) # 将inputs移动到显存中，并转换为Variable变量。
+            if len(pos): # 如果pos非空
+                pos = Variable(pos.cuda()) # 将pos移动到显存中，并转换为Variable变量。
             if len(neg):
-                neg = Variable(neg.cuda())
+                neg = Variable(neg.cuda()) # 将neg移动到显存中，并转化为Variable变量。
             for i in attribute.keys():
-                attribute[i] = Variable(attribute[i].cuda())
+                attribute[i] = Variable(attribute[i].cuda()) # 将attribute中的所有变量都移动到显存。
             for i in attribute_pos.keys():
                 attribute_pos[i] = Variable(attribute_pos[i].cuda())
             for i in attribute_neg.keys():
                 attribute_neg[i] = Variable(attribute_neg[i].cuda())
         else:
-            inputs = Variable(inputs)
+            inputs = Variable(inputs) # 不适用gpu的话，则变量还是保存在内存中。
             if len(pos):
                 pos = Variable(pos)
             if len(neg):
@@ -1665,10 +1714,15 @@ class HICMD(nn.Module):
                 attribute_pos[i] = Variable(attribute_pos[i])
             for i in attribute_neg.keys():
                 attribute_neg[i] = Variable(attribute_neg[i])
-        labels = attribute['order']
+        labels = attribute['order']# 获得index对应图像的类型索引。
 
         return inputs, pos, neg, attribute, attribute_pos, attribute_neg, labels
-
+        # inputs：       Index对应图像生成的tensor。   1*3*256*128维度的tensor。Variable变量。
+        # pos：          1*8*3*256*128维的图像tensor。Variable变量。 
+        # neg：          1*4*3*256*128的图像tensor。Variable变量。
+        # attribute:     index对应图像的标签信息。   字典 Variable变量。
+        # attribute_pos: 8张正向示例图像的标签等信息。字典 Variable变量。
+        # attribute_neg: 4张负向示例图像的标签等信息。字典 Variable变量。
     def apply_CE_loss_between_two_labels(self, opt, pred_labels, labels, num_part, loss_all=0.0, acc_all=0.0, loss_cnt=0.0):
         if num_part > 1:
             part = {}
@@ -1937,22 +1991,25 @@ def get_num_adain_params(model):
     return num_adain_params
 
 def torch_gather(input, index, dim):
-    index_cuda = torch.Tensor(index).cuda().long()
+    #将index 变为tensor， 放到显存， 转换为长整形tensor
+    index_cuda = torch.Tensor(index).cuda().long()  
     if dim == 1:
-        output = input[:, index_cuda].clone()
+        output = input[:, index_cuda].clone() # clone代表着深拷贝
     return output
+    # input:2*2048
+
 
 def change_two_index(var1, var2, idx1, idx2):
     # 创建Variable变量，并移动到cuda上。requires_grad 置为true, 表示该变量要参与反向传播，并计算梯度。
     new_var1 = Variable(torch.Tensor(var1.shape), requires_grad=True).cuda()
     new_var2 = Variable(torch.Tensor(var2.shape), requires_grad=True).cuda()
-    new_var1 = new_var1.type(var1.dtype)    # 将new_var1 变成和var1 一样的类型?????
+    new_var1 = new_var1.type(var1.dtype)    # 将new_var1 变成和var1 一样的类型
     new_var2 = new_var2.type(var2.dtype)    # 将new_var2 变成和var2 一样的类型。
-    new_var1[:, idx2] = var1[:, idx2]  # 前半部分保持不变。 这是ID相关的属性编码
-    new_var2[:, idx2] = var2[:, idx2]
-    new_var1[:, idx1] = var2[:, idx1]  # 后半部分进行交换。  也就是交换属性编码中的 光照编码和姿势编码  这是ID无关的属性编码
-    new_var2[:, idx1] = var1[:, idx1]
-
+    new_var1[:, idx2] = var1[:, idx2]  # var1的 ID无关 属性编码 。 也就是交换属性编码中的 光照编码和姿势编码  这是ID无关的属性编码
+    new_var2[:, idx2] = var2[:, idx2]  # var2的 ID无关 属性编码
+    new_var1[:, idx1] = var2[:, idx1]  # var2的 风格 属性编码  
+    new_var2[:, idx1] = var1[:, idx1]  # var1的 风格 属性编码
+    # 也就是在这里进行了风格属性编码的呼唤
     return new_var1, new_var2   # 返回交换后的属性编码。
 
 def find_array(idx_all, idx_target):
