@@ -138,10 +138,10 @@ class HICMD(nn.Module):
         all_params = [{'params': list(self.id_classifier.parameters()), 'lr': opt.lr_backbone}]
         all_params.append({'params': list(self.backbone_pro.parameters()), 'lr': opt.lr_backbone * opt.backbone_pro_lr_ratio})
         all_params.append({'params': list(self.combine_weight.parameters()), 'lr': opt.lr_backbone * opt.combine_weight_lr_ratio})
-
+        # 优化器
         #******************Optimizer and scheduler***************************************
 
-        # 这里定义了优化器和调度器。
+        # 这里定义了优化器和调度器。其他模块(id_classifier, backbone_pro, combine_weight)的参数优化器。
         self.id_optimizer = optim.SGD(all_params, weight_decay=opt.weight_decay_bb, momentum=opt.momentum,
                                       nesterov=opt.flag_nesterov)
         # 根据dis_params 设置 鉴别器的优化器和调度器                                      
@@ -515,7 +515,7 @@ class HICMD(nn.Module):
             x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        
             # 生成图像Xb->a。 根据Gx_b的风格属性和原型编码 和 Gx_a的ID无关编码(光照和姿态)
             x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   
-            # 生成图像Xa->a 。根据Gx_a的ID无关编码 和原型编码； Gx_b的风格属性编码(ID相关)：同ID的RGB/IR图像，该值应相等
+            # 生成图像Xa->a 。根据Gx_a的ID无关编码 和原型编码c_a； Gx_b的风格属性编码(ID相关)：同ID的RGB/IR图像，该值应相等
 
             x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        
             # 生成图像Xa->b。 根据Gx_a的原型编码和风格属性编码  Gx_b的ID无关编码(光照和姿态)。
@@ -525,6 +525,7 @@ class HICMD(nn.Module):
             x_ba_raw = x_ba.clone()  # 进行深拷贝。
             x_ab_raw = x_ab.clone()  # 进行深拷贝。
 
+            # 如果更新损失函数。
             if Do_gen_update:
                 c_b_recon = self.gen_a.enc_pro(x_ba)    
                  # 对Xba提取  原型编码, 得到原型编码 c_b_recon
@@ -543,7 +544,8 @@ class HICMD(nn.Module):
                     x_bab = self.gen_b.dec(c_b_recon, s_b, self.gen_b.enc_pro.output_dim)    
                     # 生成图像Xbab。
 
-                # reconstruction loss (same) 重建误差，这个可以用在两张不同id图像
+                # reconstruction loss (same) 重建误差，这个必须是相同id的两个图像
+                # x_a_recon: Gx_a的ID无关编码 和原型编码; Gx_b的风格属性编码(ID相关)    Gx_a_raw:就是Gx_a。
                 self.loss_gen_recon_x_a = self.recon_criterion(x_a_recon, Gx_a_raw) # 返回tensor变量。
                 self.loss_gen_recon_x_b = self.recon_criterion(x_b_recon, Gx_b_raw)
                 self.loss_gen_recon_x = opt.w_recon_x * (self.loss_gen_recon_x_a + self.loss_gen_recon_x_b)
@@ -551,6 +553,8 @@ class HICMD(nn.Module):
                 # tensor.item():将标量tensor转换为一个数。 G_rec_x：Genaratord reconstruction loss
                 
                 # reconstruction loss (cross) 这个必须是相同的ID的两张图像
+                # x_ab_raw：根据Gx_a的原型编码和风格属性编码(ID相关编码)   Gx_b的ID无关编码(光照和姿态)
+                # Gx_b_raw：就是Gx_b
                 self.loss_gen_cross_x_ab = self.recon_criterion(x_ab_raw, Gx_b_raw)
                 self.loss_gen_cross_x_ba = self.recon_criterion(x_ba_raw, Gx_a_raw)
                 self.loss_gen_cross_x = opt.w_cross_x * (self.loss_gen_cross_x_ab + self.loss_gen_cross_x_ba)
@@ -559,6 +563,7 @@ class HICMD(nn.Module):
                 
                 # reconstruction loss (cycle) 这个可以用在两张不同ID图像。
                 if opt.w_cycle_x > 0:# opt.w_cycle = 50
+                    # 
                     self.loss_gen_cyc_x_a = self.recon_criterion(x_aba, Gx_a_raw)
                     self.loss_gen_cyc_x_b = self.recon_criterion(x_bab, Gx_b_raw)
                 else:
@@ -568,7 +573,7 @@ class HICMD(nn.Module):
                 self.loss_type['G_cyc_x'] = self.loss_gen_cyc_x.item() if self.loss_gen_cyc_x != 0 else 0
 
                 # attribute code reconstruction loss ########################################
-                # 下面提取相应的属性和原型编码到对应的向量中。
+                # 下面提取相应的属性和原型编码到对应的向量中。目的在于确保提取的编码能够
                 
                 # 提取Gx_a属性编码s_a_id中的 2个 1024 维度的风格属性编码，ID相关。
                 att_style_s_a = torch_gather(s_a_id, self.att_style_idx, 1)   
@@ -593,9 +598,9 @@ class HICMD(nn.Module):
                 # att_ex_s_b：Gx_b的ID无关编码。 att_ex_s_b_recon：x_ab的ID无关编码(Gx_b的ID无关编码)  # 可以用在跨源域目标域训练中。
                 self.loss_gen_recon_s += self.recon_criterion(att_ex_s_b, att_ex_s_b_recon)
                 self.etc_type['S_remain'] = self.loss_gen_recon_s.item() # 标量tensor可以使用item()提取标量取值。
-                # att_style_s_b: Gx_b的风格属性编码。 att_style_s_a_recon：x_ba的风格属性编码(Gx_b的风格属性)
+                # att_style_s_b: Gx_b的风格属性编码。 att_style_s_a_recon：x_ba的风格属性编码(Gx_b的风格属性) # 可以用在跨源域目标域训练中。
                 self.loss_gen_recon_s2 = self.recon_criterion(att_style_s_b, att_style_s_a_recon)
-                # att_style_s_a: Gx_a的风格属性编码。 att_style_s_b_recon：x_ab的风格属性编码(Gx_a的风格属性)
+                # att_style_s_a: Gx_a的风格属性编码。 att_style_s_b_recon：x_ab的风格属性编码(Gx_a的风格属性) # 可以用在跨源域目标域训练中。
                 self.loss_gen_recon_s2 += self.recon_criterion(att_style_s_a, att_style_s_b_recon)
                 self.etc_type['S_ID'] = self.loss_gen_recon_s2.item()
                 self.loss_gen_recon_s += self.loss_gen_recon_s2
@@ -604,41 +609,49 @@ class HICMD(nn.Module):
                 self.loss_type['G_rec_s'] = self.loss_gen_recon_s.item() if self.loss_gen_recon_s != 0 else 0
 
                 # KLD loss (attribute code to gaussian distribution) #############################
+                # 首先提取s_a中的ID无关属性编码(就是Gx_a图像的ID无关编码)。 然后计算KLD损失。
+                # KL散度用来衡量 两种分布之间的差异，又叫做相对熵。
+                # 目的在于使得编码的分布尽可能近似于高斯分布，使得编码能够在潜在空间连续分布。
+                # 这个可以应用于跨源域目标域训练中。
                 self.loss_gen_s_a_kl = self.compute_kl(
                     torch_gather(s_a, self.att_ex_idx, 1)) if opt.w_style_kl != 0 else 0
+
                 self.loss_gen_s_b_kl = self.compute_kl(
                     torch_gather(s_b, self.att_ex_idx, 1)) if opt.w_style_kl != 0 else 0
+
                 self.loss_gen_kl = opt.w_style_kl * (self.loss_gen_s_a_kl + self.loss_gen_s_b_kl)
                 self.loss_type['style_kl'] = self.loss_gen_kl.item() if self.loss_gen_kl != 0 else 0
 
                 # GAN loss 这个可以用在不同ID的两个图像中。
-                self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba_raw)
-                self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab_raw)
+                self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba_raw) # 输入生成的假图像。
+                self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab_raw) # 输入生成的假图像。
                 self.loss_gen_adv = opt.w_gan * (self.loss_gen_adv_a + self.loss_gen_adv_b)
                 self.loss_type['G_adv'] = self.loss_gen_adv.item() if self.loss_gen_adv != 0 else 0
-                s_a3_add = s_a2.clone()
-                s_b3_add = s_b2.clone()
+                s_a3_add = s_a2.clone() # 深拷贝 Gx_a的未修改的属性编码s_a2。
+                s_b3_add = s_b2.clone() # 深拷贝 Gx_b的未修改的属性编码s_b2。
 
-                tmp = self.att_style_idx.copy()
+                tmp = self.att_style_idx.copy()  # 
                 tmp.extend(self.att_pose_idx)
                 s_a3_add, s_b3_add = change_two_index(s_a3_add, s_b3_add, tmp, self.att_illum_idx)  # only modality change
-
+                # 生成合成图像。
+                # 这个可以应用于跨源域目标域训练中
                 x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim)  # (ID, pose) b, (modality) a
                 x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim)  # (ID, pose) a, (modality) b
-                self.loss_gen_adv_a3 = self.dis_a.calc_gen_loss(x_ba3)
-                self.loss_gen_adv_b3 = self.dis_b.calc_gen_loss(x_ab3)
+                self.loss_gen_adv_a3 = self.dis_a.calc_gen_loss(x_ba3) # 输入生成的假图像
+                self.loss_gen_adv_b3 = self.dis_b.calc_gen_loss(x_ab3) # 输入生成的假图像。
                 self.loss_gen_adv += opt.w_gan * (self.loss_gen_adv_a3 + self.loss_gen_adv_b3)
 
                 # total ID-PIG loss   计算IDPIG部分总的损失函数值，这个值是一个标量，一个数。
                 self.loss_gen_total = self.loss_gen_recon_x + self.loss_gen_cyc_x + self.loss_gen_adv + \
                                       self.loss_gen_recon_s + self.loss_gen_kl + self.loss_gen_cross_x
-
+                # 将所有和ID-PIG的损失函数值进行累加。
                 if opt.HFL_ratio > 0:
                     self.loss_gen_total *= (1.0 - opt.HFL_ratio)
 
-                self.loss_type['TOT_G'] = self.loss_gen_total.item()
+                self.loss_type['TOT_G'] = self.loss_gen_total.item() # 存储ID-PIG的总损失函数。
 
             else:
+                # 如果不更新损失函数，就使用老的损失函数。
                 try:
                     self.loss_type['G_adv'] = self.old_loss_type['G_adv']
                     self.loss_type['G_rec_x'] = self.old_loss_type['G_rec_x']
@@ -661,73 +674,89 @@ class HICMD(nn.Module):
         ##########################################################################
 
         if Do_id_update:
-
+            # Do_id_update=True
             if self.zero_grad_ID:
-                self.id_optimizer.zero_grad()  ##################### Add
+                self.id_optimizer.zero_grad()  # 将其他模块的参数梯度进行清零。
                 self.zero_grad_ID = False
 
             # Compute prototype and attribute codes (for alternate sampling)
             x_a_re_id = self.to_re(Gx_a_raw.clone())  # 将输入图像进行随机的擦除部分区域。
-            x_b_re_id = self.to_re(Gx_b_raw.clone())  #
-            x_a_re_id = x_a_re_id.detach()  # 从梯度计算中剥离。
-            x_b_re_id = x_b_re_id.detach()
+            x_b_re_id = self.to_re(Gx_b_raw.clone())  # 将输入图像进行随机的擦除。
+            x_a_re_id = x_a_re_id.detach()            # 从梯度计算中剥离。
+            x_b_re_id = x_b_re_id.detach()            # 从梯度图中剥离。 阻断梯度传导。
 
-            c_a_id = self.gen_a.enc_pro(x_a_re_id)  # 计算原型编码。
-            c_b_id = self.gen_b.enc_pro(x_b_re_id)  # 计算原型编码，得到c_b_id
-            s_a_id = self.gen_a.enc_att(x_a_re_id)  # 计算属性编码
-            s_b_id = self.gen_b.enc_att(x_b_re_id)  # 计算属性编码。
+            c_a_id = self.gen_a.enc_pro(x_a_re_id)    # 计算随机擦除x_a后的原型编码。
+            c_b_id = self.gen_b.enc_pro(x_b_re_id)    # 计算随机擦除x_b后的原型编码。
+            s_a_id = self.gen_a.enc_att(x_a_re_id)    # 计算随机擦除x_a后的属性编码。
+            s_b_id = self.gen_b.enc_att(x_b_re_id)    # 计算随机擦除x_b后的属性编码。
 
+            ######################################################
             x_ab_re_id = self.to_re(x_ab_raw.clone())   # 将Xab进行随机擦除。
-            x_ba_re_id = self.to_re(x_ba_raw.clone())
+            x_ba_re_id = self.to_re(x_ba_raw.clone())   # 将Xba进行随机擦除。
             x_ab_re_id = x_ab_re_id.detach()
             x_ba_re_id = x_ba_re_id.detach()
 
-            c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算随机擦除后的XAB的 原型编码
-            c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)   # 计算。。
-            s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)
-            s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)
+            c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算随机擦除x_ab后的原型编码
+            c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)   # 计算随机擦除x_ba后的原型编码
+            s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)   # 计算随机擦除x_ba后的属性编码
+            s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)   # 计算随机擦除x_ab后的属性编码
 
-            c_a_id = self.backbone_pro(c_a_id)  # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。
-            s_a_id_raw = s_a_id.clone()
-            s_a_id = torch_gather(s_a_id, self.att_style_idx, 1)   # 从2048维度的向量中提取1024维度的 风格 属性编码
-
+            ################################################################################
+            c_a_id     = self.backbone_pro(c_a_id)                    # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。
+            s_a_id_raw = s_a_id.clone()                               # 拷贝 随机擦除x_a后的属性编码
+            s_a_id     = torch_gather(s_a_id, self.att_style_idx, 1)  # 从2048维度的向量中提取1024维度的 风格 属性编码
+            
+            # 求标准化之后的原型编码和 风格属性编码
             c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))
             s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))
 
-            self.etc_type['combine_w'] = self.combine_weight.multp.item()
+            # 将原型编码 和 风格属性编码乘以权重。
+            self.etc_type['combine_w'] = self.combine_weight.multp.item() # = 0.5
             c_a_id_norm *= min(self.combine_weight.multp, 1.0)
             s_a_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
 
-            c_b_id = self.backbone_pro(c_b_id)
-            s_b_id = torch_gather(s_b_id, self.att_style_idx, 1)
-
+            ##########################################################################
+            c_b_id = self.backbone_pro(c_b_id)  # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。 
+            s_b_id = torch_gather(s_b_id, self.att_style_idx, 1) # 提取风格属性编码。
+            
+            # 标准化原型编码和风格属性编码。
             c_b_id_norm = c_b_id.div(torch.norm(c_b_id, p=2, dim=1, keepdim=True).expand_as(c_b_id))
             s_b_id_norm = s_b_id.div(torch.norm(s_b_id, p=2, dim=1, keepdim=True).expand_as(s_b_id))
 
+            # 将原型编码 和 风格属性编码乘以权重。
             c_b_id_norm *= min(self.combine_weight.multp, 1.0)
             s_b_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
 
+            ###########################################################################
             c_a_recon_id = self.backbone_pro(c_a_recon_id)
             s_a_recon_id = torch_gather(s_a_recon_id, self.att_style_idx, 1)
-
+            
+            # 标准化原型编码和风格属性编码。
             c_a_recon_id_norm = c_a_recon_id.div(torch.norm(c_a_recon_id, p=2, dim=1, keepdim=True).expand_as(c_a_recon_id))
             s_a_recon_id_norm = s_a_recon_id.div(torch.norm(s_a_recon_id, p=2, dim=1, keepdim=True).expand_as(s_a_recon_id))
 
+            # 将原型编码 和 风格属性编码乘以权重。
             c_a_recon_id_norm *= min(self.combine_weight.multp, 1.0)
             s_a_recon_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
 
+            ############################################################################
             c_b_recon_id = self.backbone_pro(c_b_recon_id)
             s_b_recon_id = torch_gather(s_b_recon_id, self.att_style_idx, 1)
 
+            # 标准化原型编码和风格属性编码。
             c_b_recon_id_norm = c_b_recon_id.div(torch.norm(c_b_recon_id, p=2, dim=1, keepdim=True).expand_as(c_b_recon_id))
             s_b_recon_id_norm = s_b_recon_id.div(torch.norm(s_b_recon_id, p=2, dim=1, keepdim=True).expand_as(s_b_recon_id))
 
+            # 将原型编码 和 风格属性编码乘以权重。
             c_b_recon_id_norm *= min(self.combine_weight.multp, 1.0)
             s_b_recon_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
 
-
+            ##############################################################
             if self.is_neg:
-
+                
+                # 下面来处理负示例。
+                # neg_a: 2张RGB图像 tensor。
+                # neg_b: 2张IR 图像 tensor。
                 if opt.G_input_dim == 1:
                     Gy_a = self.single(neg_a.clone())
                     Gy_b = self.single(neg_b.clone())
@@ -735,38 +764,41 @@ class HICMD(nn.Module):
                     Gy_a = neg_a.clone()
                     Gy_b = neg_b.clone()
 
-                y_a_re_id = self.to_re(Gy_a.clone())
-                y_b_re_id = self.to_re(Gy_b.clone())
+                y_a_re_id = self.to_re(Gy_a.clone())  # 对2张RGB图像随机擦除。                
+                y_b_re_id = self.to_re(Gy_b.clone())  # 对2张IR图像随机擦除。       
 
-                y_a_re_id = y_a_re_id.detach()
-                y_b_re_id = y_b_re_id.detach()
+                y_a_re_id = y_a_re_id.detach() # 从梯度图剔除。
+                y_b_re_id = y_b_re_id.detach() # 从梯度图剔除。
 
-                c_a_neg_id = self.gen_a.enc_pro(y_a_re_id)
-                c_b_neg_id = self.gen_b.enc_pro(y_b_re_id)
-                s_a_neg_id = self.gen_a.enc_att(y_a_re_id)
-                s_b_neg_id = self.gen_b.enc_att(y_b_re_id)
+                c_a_neg_id = self.gen_a.enc_pro(y_a_re_id) # Gy_a随机擦除后提取的原型编码。
+                c_b_neg_id = self.gen_b.enc_pro(y_b_re_id) # Gy_b随机擦除后提取的原型编码。
+                s_a_neg_id = self.gen_a.enc_att(y_a_re_id) # Gy_a随机擦除后提取的属性编码。
+                s_b_neg_id = self.gen_b.enc_att(y_b_re_id) # Gy_b随机擦除后提取的原型编码。
 
-                c_a_neg_id = self.backbone_pro(c_a_neg_id)
-                c_b_neg_id = self.backbone_pro(c_b_neg_id)
+                c_a_neg_id = self.backbone_pro(c_a_neg_id) # 将原型编码进行映射。
+                c_b_neg_id = self.backbone_pro(c_b_neg_id) # 将原型编码进行映射。
 
-                s_a_neg_id = torch_gather(s_a_neg_id, self.att_style_idx, 1)
-                s_b_neg_id = torch_gather(s_b_neg_id, self.att_style_idx, 1)
+                s_a_neg_id = torch_gather(s_a_neg_id, self.att_style_idx, 1) # 提取风格属性编码
+                s_b_neg_id = torch_gather(s_b_neg_id, self.att_style_idx, 1) # 提取风格属性编码。
 
+                # 进行原型编码和风格属性编码的标准化。
                 c_a_neg_id_norm = c_a_neg_id.div(torch.norm(c_a_neg_id, p=2, dim=1, keepdim=True).expand_as(c_a_neg_id))
                 s_a_neg_id_norm = s_a_neg_id.div(torch.norm(s_a_neg_id, p=2, dim=1, keepdim=True).expand_as(s_a_neg_id))
                 c_b_neg_id_norm = c_b_neg_id.div(torch.norm(c_b_neg_id, p=2, dim=1, keepdim=True).expand_as(c_b_neg_id))
                 s_b_neg_id_norm = s_b_neg_id.div(torch.norm(s_b_neg_id, p=2, dim=1, keepdim=True).expand_as(s_b_neg_id))
 
+                # 乘以权重。
                 self.etc_type['combine_w'] = self.combine_weight.multp.item()
                 c_a_neg_id_norm *= min(self.combine_weight.multp, 1.0)
                 s_a_neg_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
                 c_b_neg_id_norm *= min(self.combine_weight.multp, 1.0)
-                s_b_neg_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
+                s_b_neg_id_norm *= max((1.0 - self.combine_weight.multp), 0.0) # 2*1024维度。
 
-            c_all = torch.Tensor().cuda().type(c_a_id_norm.dtype)
-            s_all = torch.Tensor().cuda().type(s_a_id_norm.dtype)
-            label_all = torch.Tensor().cuda().type(self.labels_a.dtype)
-            idx_all = []
+            ############################################################################
+            c_all = torch.Tensor().cuda().type(c_a_id_norm.dtype) # 创建变量用于存储。
+            s_all = torch.Tensor().cuda().type(s_a_id_norm.dtype) # 创建变量用于存储。
+            label_all = torch.Tensor().cuda().type(self.labels_a.dtype) # 创建变量用于存储。
+            idx_all = [] # 创建变量用于存储。
 
             pivot_idx_ce = [1, 2, 3, 4, 5, 6, 7, 8]  # base 1,2,3,4 [5,6] 7,8,9,10
             pivot_idx_trip1 = [1, 3, 7]
@@ -779,28 +811,42 @@ class HICMD(nn.Module):
             samp_idx.extend(pivot_idx_trip2.copy())
             samp_idx.extend(target_idx_trip1.copy())
             samp_idx.extend(target_idx_trip2.copy())
-            samp_idx = list(set(samp_idx))
+            samp_idx = list(set(samp_idx)) # 选择其中不重复的编号。 1-8 .
 
 
-            if 1 in samp_idx: # pure a [a]
+            if 1 in samp_idx: # pure a [a]  
+                # c_a_id_norm：    随机擦除x_a后的 加权 原型编码。
+                # s_a_id_norm：    随机擦除x_a后的 加权 风格属性编码。
+                # self.labels_a：  x_a对应的标签
                 c_all = torch.cat((c_all, c_a_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_a_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_a), dim=0)
                 idx_all.extend([1]*len(self.labels_a))
 
             if 2 in samp_idx: # pure b [b]
+                # c_b_id_norm：    随机擦除x_b后的 加权 原型编码。
+                # s_b_id_norm：    随机擦除x_b后的 加权 风格属性编码。
+                # self.labels_b：  x_b对应的标签 
                 c_all = torch.cat((c_all, c_b_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_b_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_b), dim=0)
                 idx_all.extend([2]*len(self.labels_b))
 
             if 3 in samp_idx: # x_ba (c_b_recon, s_a_recon) [b] a'
+                # x_ba:              根据Gx_b的风格属性和原型编码 和 Gx_a的ID无关编码。
+                # c_b_recon_id_norm：随机擦除x_ba后的 加权 原型编码。（Gx_b的原型编码）                
+                # s_a_recon_id_norm：随机擦除x_ba后的 加权 风格属性编码。（Gx_b的风格属性编码）
+                # self.labels_b：    x_b对应的标签。
                 c_all = torch.cat((c_all, c_b_recon_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_a_recon_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_b), dim=0)
                 idx_all.extend([3]*len(self.labels_b))
 
             if 4 in samp_idx:  # x_ab (c_a_recon, s_b_recon) [a] b'
+                # x_ab:              根据Gx_a的原型编码和风格属性编码  Gx_b的ID无关编码。
+                # c_b_recon_id_norm：随机擦除x_ab后的 加权 原型编码。（Gx_a的原型编码）                
+                # s_a_recon_id_norm：随机擦除x_ab后的 加权 风格属性编码。（Gx_a的风格属性编码）
+                # self.labels_a：    x_a对应的标签。
                 c_all = torch.cat((c_all, c_a_recon_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_b_recon_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_a), dim=0)
@@ -808,12 +854,14 @@ class HICMD(nn.Module):
 
             if self.is_neg:
                 if 5 in samp_idx: # neg a [neg_a]
+
                     c_all = torch.cat((c_all, c_a_neg_id_norm), dim=0)  # original
                     s_all = torch.cat((s_all, s_a_neg_id_norm), dim=0)
                     label_all = torch.cat((label_all, self.labels_neg_a), dim=0)
                     idx_all.extend([5]*len(self.labels_neg_a))
 
                 if 6 in samp_idx: # neg b [neg_b]
+                    
                     c_all = torch.cat((c_all, c_b_neg_id_norm), dim=0)  # original
                     s_all = torch.cat((s_all, s_b_neg_id_norm), dim=0)
                     label_all = torch.cat((label_all, self.labels_neg_b), dim=0)
@@ -831,6 +879,7 @@ class HICMD(nn.Module):
                 label_all = torch.cat((label_all, self.labels_b, self.labels_a), dim=0)
                 idx_all.extend([8]*len(self.labels_a)*2)
 
+            # 后面的没有用到##########################################################
             if 9 in samp_idx: # b_cross_comb (b - a+ba) [b-a] a'''
                 c_all = torch.cat((c_all, c_b_id_norm, c_b_id_norm, c_a_recon_id_norm, c_a_recon_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_a_id_norm, s_a_recon_id_norm, s_a_id_norm, s_a_recon_id_norm), dim=0)
@@ -865,28 +914,33 @@ class HICMD(nn.Module):
                 label_all = torch.cat((label_all, self.labels_a, self.labels_b, self.labels_a, self.labels_b, self.labels_a, self.labels_b, self.labels_a, self.labels_b), dim=0)
                 idx_all.extend([13] * len(self.labels_a) * 8)
 
+            ##########################################################
             f_all = torch.Tensor().cuda()
             f_all = torch.cat((f_all, c_all), dim=1)
             f_all = torch.cat((f_all, s_all), dim=1)
 
             output_all, _, f_all_triplet = self.id_classifier(f_all)
 
-            pivot_idx_ce = find_array(idx_all, pivot_idx_ce)
-            pivot_idx_trip1 = find_array(idx_all, pivot_idx_trip1)
-            target_idx_trip1 = find_array(idx_all, target_idx_trip1)
-            pivot_idx_trip2 = find_array(idx_all, pivot_idx_trip2)
-            target_idx_trip2 = find_array(idx_all, target_idx_trip2)
+            pivot_idx_ce        = find_array(idx_all, pivot_idx_ce)
+            pivot_idx_trip1     = find_array(idx_all, pivot_idx_trip1)
+            target_idx_trip1    = find_array(idx_all, target_idx_trip1)
+            pivot_idx_trip2     = find_array(idx_all, pivot_idx_trip2)
+            target_idx_trip2    = find_array(idx_all, target_idx_trip2)
 
-            output_all_ce = output_all[pivot_idx_ce].clone()
-            label_all_ce = label_all[pivot_idx_ce].clone()
-            f_all_triplet1 = f_all_triplet[pivot_idx_trip1].clone()
-            label_triplet1 = label_all[pivot_idx_trip1].clone()
-            f_all_triplet1_target = f_all_triplet[target_idx_trip1].clone()
-            label_triplet1_target = label_all[target_idx_trip1].clone()
-            f_all_triplet2 = f_all_triplet[pivot_idx_trip2].clone()
-            label_triplet2 = label_all[pivot_idx_trip2].clone()
-            f_all_triplet2_target = f_all_triplet[target_idx_trip2].clone()
-            label_triplet2_target = label_all[target_idx_trip2].clone()
+            output_all_ce           = output_all[pivot_idx_ce].clone()
+            label_all_ce            = label_all[pivot_idx_ce].clone()
+
+            f_all_triplet1          = f_all_triplet[pivot_idx_trip1].clone()
+            label_triplet1          = label_all[pivot_idx_trip1].clone()
+
+            f_all_triplet1_target   = f_all_triplet[target_idx_trip1].clone()
+            label_triplet1_target   = label_all[target_idx_trip1].clone()
+
+            f_all_triplet2          = f_all_triplet[pivot_idx_trip2].clone()
+            label_triplet2          = label_all[pivot_idx_trip2].clone()
+
+            f_all_triplet2_target   = f_all_triplet[target_idx_trip2].clone()
+            label_triplet2_target   = label_all[target_idx_trip2].clone()
 
             # CE loss
             num_part = 1
@@ -954,7 +1008,7 @@ class HICMD(nn.Module):
             self.loss_total.backward()
             self.gen_optimizer.step()
             self.zero_grad_G = True
-            self.id_optimizer.step()
+            self.id_optimizer.step()  # 这里对其他模块的参数进行更新。
             self.zero_grad_ID = True
             self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
         elif Do_gen_update:
@@ -1147,8 +1201,8 @@ class HICMD(nn.Module):
         # 求两个量的绝对差 的平均值。
 
     def compute_kl(self, mu):
-        mu_2 = torch.pow(mu, 2)
-        encoding_loss = torch.mean(mu_2)
+        mu_2 = torch.pow(mu, 2) # 对mu每个元素求平方。
+        encoding_loss = torch.mean(mu_2) # 计算平均值 
         return encoding_loss
 
     def compute_vgg_loss(self, vgg, img, target):

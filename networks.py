@@ -167,7 +167,7 @@ class Discriminator(nn.Module):
 
         for it, (out0) in enumerate(outs0):
             if self.gan_type == 'lsgan':
-                loss += torch.mean((out0 - 1)**2) # LSGAN
+                loss += torch.mean((out0 - 1)**2) # LSGAN # 假图像标签为1， 真图像标签为0.
             elif self.gan_type == 'nsgan':
                 all1 = Variable(torch.ones_like(out0.data).cuda(), requires_grad=False)
                 loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all1))
