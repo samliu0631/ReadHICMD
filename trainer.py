@@ -844,9 +844,9 @@ class HICMD(nn.Module):
 
             if 4 in samp_idx:  # x_ab (c_a_recon, s_b_recon) [a] b'
                 # x_ab:              根据Gx_a的原型编码和风格属性编码  Gx_b的ID无关编码。
-                # c_b_recon_id_norm：随机擦除x_ab后的 加权 原型编码。（Gx_a的原型编码）                
-                # s_a_recon_id_norm：随机擦除x_ab后的 加权 风格属性编码。（Gx_a的风格属性编码）
-                # self.labels_a：    x_a对应的标签。
+                # c_a_recon_id_norm: 随机擦除x_ab后的 加权 原型编码。（Gx_a的原型编码）                
+                # s_b_recon_id_norm: 随机擦除x_ab后的 加权 风格属性编码。（Gx_a的风格属性编码）
+                # self.labels_a:     x_a对应的标签。
                 c_all = torch.cat((c_all, c_a_recon_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_b_recon_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_a), dim=0)
@@ -854,26 +854,38 @@ class HICMD(nn.Module):
 
             if self.is_neg:
                 if 5 in samp_idx: # neg a [neg_a]
-
+                    # c_a_neg_id_norm: Gy_a随机擦除后提取的原型编码, 进行了标准化并乘以了权重。
+                    # s_a_neg_id_norm：Gy_a随机擦除后提取的属性编码, 进行了标准化并乘以了权重。
+                    # self.labels_neg_a：负向示例Gy_a的标签。(2张RGB图像)
                     c_all = torch.cat((c_all, c_a_neg_id_norm), dim=0)  # original
                     s_all = torch.cat((s_all, s_a_neg_id_norm), dim=0)
                     label_all = torch.cat((label_all, self.labels_neg_a), dim=0)
                     idx_all.extend([5]*len(self.labels_neg_a))
 
                 if 6 in samp_idx: # neg b [neg_b]
-                    
+                    # c_b_neg_id_norm: Gy_b随机擦除后提取的原型编码, 进行了标准化并乘以了权重。
+                    # s_b_neg_id_norm：Gy_b随机擦除后提取的属性编码, 进行了标准化并乘以了权重。
+                    # self.labels_neg_b：负向示例Gy_b的标签。（2张IR图像。）
                     c_all = torch.cat((c_all, c_b_neg_id_norm), dim=0)  # original
                     s_all = torch.cat((s_all, s_b_neg_id_norm), dim=0)
                     label_all = torch.cat((label_all, self.labels_neg_b), dim=0)
                     idx_all.extend([6]*len(self.labels_neg_b))
 
             if 7 in samp_idx: # a_uni_comb (a - ba) [a-b] a''
+                # c_a_id_norm:      随机擦除x_a后的 加权 原型编码。
+                # s_a_recon_id_norm: 随机擦除x_ba后的 加权 风格属性编码。（Gx_b的风格属性编码）
+                # c_b_recon_id_norm: 随机擦除x_ba后的 加权 原型编码。（Gx_b的原型编码）                
+                # s_a_id_norm:      随机擦除x_a后的 加权 风格属性编码。
                 c_all = torch.cat((c_all, c_a_id_norm, c_b_recon_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_a_recon_id_norm, s_a_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_a, self.labels_b), dim=0)
                 idx_all.extend([7]*len(self.labels_a)*2)
 
             if 8 in samp_idx: # b_uni_comb (b - ab) [b-a] b''
+                # c_b_id_norm:       随机擦除x_b后的 加权 原型编码。                
+                # s_b_recon_id_norm: 随机擦除x_ab后的 加权 风格属性编码。（Gx_a的风格属性编码）
+                # c_a_recon_id_norm: 随机擦除x_ab后的 加权 原型编码。（Gx_a的原型编码）
+                # s_b_id_norm:       随机擦除x_b后的 加权 风格属性编码。
                 c_all = torch.cat((c_all, c_b_id_norm, c_a_recon_id_norm), dim=0)  # original
                 s_all = torch.cat((s_all, s_b_recon_id_norm, s_b_id_norm), dim=0)
                 label_all = torch.cat((label_all, self.labels_b, self.labels_a), dim=0)
@@ -915,23 +927,23 @@ class HICMD(nn.Module):
                 idx_all.extend([13] * len(self.labels_a) * 8)
 
             ##########################################################
-            f_all = torch.Tensor().cuda()
-            f_all = torch.cat((f_all, c_all), dim=1)
-            f_all = torch.cat((f_all, s_all), dim=1)
+            f_all = torch.Tensor().cuda()             # 创建显存上的tensor变量。
+            f_all = torch.cat((f_all, c_all), dim=1)  # 存储所有的c_all tensor 
+            f_all = torch.cat((f_all, s_all), dim=1)  # 存储s_all tensor
 
-            output_all, _, f_all_triplet = self.id_classifier(f_all)
-
-            pivot_idx_ce        = find_array(idx_all, pivot_idx_ce)
+            output_all, _, f_all_triplet = self.id_classifier(f_all) # output_all:分类结果。f_fc1: 2048维度的特征。f_all_triplet: 1024维的特征。
+            # output_all : 20*206;   f_all_triplet: 20*1024
+            pivot_idx_ce        = find_array(idx_all, pivot_idx_ce)     # 找到对应的取值序号(20个)。
             pivot_idx_trip1     = find_array(idx_all, pivot_idx_trip1)
             target_idx_trip1    = find_array(idx_all, target_idx_trip1)
             pivot_idx_trip2     = find_array(idx_all, pivot_idx_trip2)
             target_idx_trip2    = find_array(idx_all, target_idx_trip2)
 
-            output_all_ce           = output_all[pivot_idx_ce].clone()
-            label_all_ce            = label_all[pivot_idx_ce].clone()
+            output_all_ce           = output_all[pivot_idx_ce].clone() # 获得分类情况对应的概率。 20*206
+            label_all_ce            = label_all[pivot_idx_ce].clone()  # 获得图像对应的标签。
 
             f_all_triplet1          = f_all_triplet[pivot_idx_trip1].clone()
-            label_triplet1          = label_all[pivot_idx_trip1].clone()
+            label_triplet1          = label_all[pivot_idx_trip1].clone() # 获取对应的标签。
 
             f_all_triplet1_target   = f_all_triplet[target_idx_trip1].clone()
             label_triplet1_target   = label_all[target_idx_trip1].clone()
@@ -942,7 +954,7 @@ class HICMD(nn.Module):
             f_all_triplet2_target   = f_all_triplet[target_idx_trip2].clone()
             label_triplet2_target   = label_all[target_idx_trip2].clone()
 
-            # CE loss
+            # CE loss  cross entropy loss 交叉熵。 可以用在跨源域和目标域的训练中。
             num_part = 1
             loss_all, acc_all, loss_cnt = self.apply_CE_loss_between_two_labels(opt, output_all_ce, label_all_ce,
                                                                                 num_part, 0.0, 0.0, 0.0)
@@ -1162,7 +1174,7 @@ class HICMD(nn.Module):
         f0 = torch.cat((f0, c_id_norm), dim=1)
         f0 = torch.cat((f0, s_id_norm), dim=1)
 
-        _, f1, f_triplet = self.id_classifier(f0)
+        _, f1, f_triplet = self.id_classifier(f0)  # f1 表示经过全连接，batchnorm,dropout 之后的特征。
 
         feature = []
         if 'content' in opt.evaluate_category:
@@ -1178,9 +1190,9 @@ class HICMD(nn.Module):
         if 'style_all' in opt.evaluate_category:
             feature += [s_id_all]
         if 'f0' in opt.evaluate_category:
-            feature += [f0]
-        if 'f1' in opt.evaluate_category:
-            feature += [f1]
+            feature += [f0]   
+        if 'f1' in opt.evaluate_category: # 在测试过程中， opt.evaluate_category= 'f1'
+            feature += [f1]  # 在测试的时候，特征向量使用的就是原始的f1.就是经过id_classifier的2048维特征。
         if 'f_triplet' in opt.evaluate_category:
             feature += [f_triplet]
 

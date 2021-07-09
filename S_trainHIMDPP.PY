@@ -11,25 +11,12 @@ from data_sampler import *
 from reIDmodel_others import *
 from trainer import HICMD
 from collections import namedtuple
+import random as rn
 
-
-from HicmdPP import * # added by sam.
-from util_pseudo import * # added by sam.
+from S_HicmdPP import *      # added by sam.
+from S_util_pseudo import *  # added by sam.
 
 version =  torch.__version__
-
-
-# set random seed
-def set_seed(seed=0):
-   rn.seed(seed)
-   os.environ['PYTHONHASHSEED'] = str(seed)
-   random.seed(seed)
-   torch.manual_seed(seed)
-   torch.cuda.manual_seed(seed)
-   torch.cuda.manual_seed_all(seed) # if you are using multi-GPU.
-   # cudnn.enabled = False
-   cudnn.deterministic = True
-   cudnn.benchmark = False  
 
 
 # 输入参数的定义
@@ -74,13 +61,13 @@ config['aa_drop']            = True     # Whether to drop the aa batch in self-t
 config['data_root_a']        = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/RegDB_01"
 output_directory             = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/MixDatasets"
 
-for round_idx in range(config['max_round']): # config['max_round']=40   40轮
-   ### setup folders
+# 跨域训练config['max_round']轮
+for round_idx in range(config['max_round']): 
+   ### setup folders ####################################
    round_output_directory = os.path.join(output_directory, str(round_idx))
    checkpoint_directory, image_directory, pseudo_directory = prepare_sub_folder_pseudo(round_output_directory)  # 设置断点，图像，和伪标签的存储路径。
    config['data_root'] = pseudo_directory  # 存储伪标签的存储路径。
 
-   # In the initial round, we disenable self-training and warmup the network with adversarial training
    # At the round of adv_warm_max_round, we switch to self-training
    if round_idx == config['adv_warm_max_round']:   # config['adv_warm_max_round'] =1 
       config['lr2'] *= config['lr2_ramp_factor']   # The factor to multiply the lr2 after switching to self-training
@@ -93,25 +80,11 @@ for round_idx in range(config['max_round']): # config['max_round']=40   40轮
 
    ### Evaluate source model ###
    if round_idx == 0: # 如果是第一轮训练，就需要加载预训练的模型。
-      ### Model initialization with source model for test ###
       # Load the pretrained HICMD model.
       trainer = HICMDPP(opt) 
       trainer.cnt_cumul = trainer.resume(opt)    
-      trainer.cuda()  # 将模型移动到cuda上。
-      # 读取在源域数据集合上，预先训练好的DGNet模型。
-      # trainer.test(config)   # annotated by sam 
-      # #write_loss(iterations, trainer, train_writer)  # annotated by sam 
-      # rank1 = trainer.rank_1
-      # rank5 = trainer.rank_5
-      # rank10 = trainer.rank_10
-      # mAP0 = trainer.mAP_zero
-      # mAP05 = trainer.mAP_half
-      # mAPn1 = trainer.mAP_neg_one
+      trainer.cuda()    # 将模型移动到cuda上。
 
-      # mAP_list.append(mAP05)
-      # rank1_list.append(rank1.numpy())
-      # rank5_list.append(rank5.numpy())
-      # rank10_list.append(rank10.numpy())
 
    ### Pseudo-label generation ###
    trainer.generate_pseudo_label(opt,config)  # 在这里进行Pseudo-label的生成。这个是DGNet没有的。

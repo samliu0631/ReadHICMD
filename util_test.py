@@ -533,7 +533,7 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
         s_f = float(s)
         ms.append(math.sqrt(s_f))
 
-    modals_set = []
+    modals_set = [] # 下面对测试数据集合中  图像模态 和 相机类型进行赋值。赋值的过程是按照一个batch（64）进行赋值的。
     for i in range(math.ceil(len(dataloaders.dataset.imgs) / dataloaders.batch_size)):
         modals_set.append(modals[i * dataloaders.batch_size:(i+1)*dataloaders.batch_size])
     cams_set = []
@@ -544,7 +544,7 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
     features_RAM_all = []
 
     for cnt, data in enumerate(dataloaders):  # Iterate over data.
-        img, label = data
+        img, label = data # 加载图像 和图像的标签。
         b, c, h, w = img.size()
         if ((cnt + 1) % opt.cnt_test_print_loss == 0) or (cnt == len(dataloaders)-1):
             print('Extract {} feature..{}/{}'.format(type_name, (cnt + 1), len(dataloaders)))
@@ -560,10 +560,10 @@ def extract_feature(opt, trainer, dataloaders, type_name, modals, cams):
                 if scale != 1:
                     # bicubic is only  available in pytorch>= 1.1
                     input_img = nn.functional.interpolate(input_img, scale_factor=scale, mode='bicubic', align_corners=False)
-
+                    # 对图像进行插值
                 if opt.test_RAM:
                     feature, feature_RAM = trainer.forward(opt, input_img, modals_set[cnt], cams_set[cnt])
-                else:
+                else:# 实际执行的是下述语句。
                     feature, _ = trainer.forward(opt, input_img, modals_set[cnt], cams_set[cnt])
 
                 if cnt_first == 1:
@@ -822,15 +822,15 @@ def extract_test_features(opt, trainer, dataloaders, data_info):
 
         opt.resume_dir = os.path.join(opt.test_dir, 'checkpoints')
         opt.resume_name = opt.test_name
-        trainer.cnt_cumul = trainer.resume(opt)
+        trainer.cnt_cumul = trainer.resume(opt) # 加载预训练的模型。
 
-        trainer = trainer.eval()
+        trainer = trainer.eval() # 切换到训练模式。
 
         if opt.use_gpu:
-            trainer = trainer.cuda()
+            trainer = trainer.cuda() # 将模型转换到显存中。
     else:
         trainer = trainer.eval()
-    with torch.no_grad():
+    with torch.no_grad(): # 如下操作，不进行梯度的计算。也就是说提取特征的过程，不计算梯度。
         gallery_feature, gallery_feature_raw = \
             extract_feature(opt, trainer, dataloaders['gallery'],'gallery', data_info['gallery_modal'], data_info['gallery_cam'])
         query_feature, query_feature_raw = \

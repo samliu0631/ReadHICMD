@@ -1810,6 +1810,7 @@ class HICMDPP(nn.Module):
 
         return all_loss, all_acc, all_reg, all_margin, all_pscore, all_nscore, loss_cnt
 
+
     def save(self, opt, epoch):
         # Save generators, discriminators, and optimizers
         if not os.path.isdir(os.path.join(opt.save_dir, 'checkpoints')):
@@ -1886,12 +1887,9 @@ class HICMDPP(nn.Module):
             out[i,:,:,:] = self.rand_erasing(x[i,:,:,:])
         return out
         
-    # generate pseudo label of target domain.
-    def generate_pseudo_label(self,opt,config):
-        self.eval()
-        Target_data_name = "SYSU"
-        #Target_data_name = "RegDB_01"
 
+    # 为生成伪标签，而设置的数据集，数据记载器，数据集信息。
+    def GenerateDataloaderDataInfo(self, opt , Target_data_name ):
         transform_val_list = []  
         transform_val_list = transform_val_list + [transforms.Resize(size=(opt.h,opt.w),interpolation=3)]   
         transform_val_list = transform_val_list + [transforms.ToTensor()]
@@ -1905,11 +1903,7 @@ class HICMDPP(nn.Module):
         datasetlist    = ['train_all','train_all_IR', 'train_all_RGB' ]
         image_datasets = { x: datasets.ImageFolder(os.path.join(opt.data_dir, Target_data_name, x),   data_transforms[x]     )   for x in datasetlist  }
         dataloaders    = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=64, shuffle=False,
-                                                    num_workers=16, pin_memory=True, drop_last=False) for x in datasetlist }
-        
-        train_path_IR  = image_datasets['train_all_IR'].imgs
-        train_path_RGB = image_datasets['train_all_RGB'].imgs
-
+                                                        num_workers=16, pin_memory=True, drop_last=False) for x in datasetlist }
         data_info   = {}
 
         data_info['train_all_IR_cam'], data_info['train_all_IR_label'], \
@@ -1920,7 +1914,11 @@ class HICMDPP(nn.Module):
             data_info['train_all_RGB_modal'] = get_attribute( \
             opt.data_flag, image_datasets['train_all_RGB'].imgs, flag = opt.type_domain_label)
 
+        return image_datasets, dataloaders , data_info
 
+
+    def  ExtractFeaturesFromTargetDomain(self, opt, dataloaders, data_info):
+        # extract features #################################################
         featurename_IR = "features_SYSU_IR.pt" # 用于保存目标域特征的文件名称。
         if os.path.exists(featurename_IR):
             target_features_IR = torch.load(featurename_IR)           
@@ -1939,25 +1937,33 @@ class HICMDPP(nn.Module):
                 data_info['train_all_RGB_modal'], data_info['train_all_RGB_cam'])   
             torch.save( target_features_RGB, featurename_RGB )
 
+        return target_features_IR, target_features_RGB
+
+
+    # generate pseudo label of target domain.
+    def generate_pseudo_label(self,opt,config):
+        # 切换为测试模式。
+        self.eval()
+        Target_data_name = "SYSU"
+        # Target_data_name = "RegDB_01"
+
+        # 准备数据集合
+        image_datasets, dataloaders , data_info = self.GenerateDataloaderDataInfo( opt ,Target_data_name )
+        
+        # 提取特征
+        target_features_IR, target_features_RGB = self.ExtractFeaturesFromTargetDomain(opt, dataloaders, data_info)
+
+        # 切换回训练模式。
         self.train()
 
+        # 对特征进行分组 clustering ############################################
+        ClassNum = 395
         # 根据提取的特征，进行图像的分组。
-        Labelname_IR = "Label_SYSU_IR.pt" # 用于保存目标域特征的文件名称。
-        if os.path.exists(Labelname_IR):
-            labels_IR = torch.load(Labelname_IR)           
-        else:           
-            labels_IR = self.clustering( target_features_IR[0], train_path_IR, config )
-            torch.save( labels_IR, Labelname_IR )
-
+        labels_IR , IR_Centers    = self.KmeansClustering(target_features_IR[0], ClassNum )
         # 根据提取的特征，进行图像的分组。
-        Labelname_RGB = "Label_SYSU_RGB.pt"
-        if os.path.exists(Labelname_RGB):
-            labels_RGB = torch.load( Labelname_RGB )           
-        else:           
-            labels_RGB = self.clustering( target_features_RGB[0], train_path_RGB, config )
-            torch.save( labels_RGB, Labelname_RGB )
-
-        # 记录分类后的图像标签类型数量。
+        labels_RGB , RGB_Centers  = self.KmeansClustering(target_features_RGB[0], ClassNum )
+ 
+        # # 记录分类后的图像标签类型数量。
         RGBNum = int(max( labels_RGB ))  + 1           
         IRNum  = int(max( labels_IR  ))  + 1
         config['ID_class_b']  = RGBNum
@@ -2031,6 +2037,8 @@ class HICMDPP(nn.Module):
 
 
         ### copy and save images ###
+        train_path_IR  = image_datasets['train_all_IR'].imgs
+        train_path_RGB = image_datasets['train_all_RGB'].imgs
         n_samples_RGB = target_features_RGB[0].shape[0]             # 获得目标域训练RGB图像的数量。
         n_samples_IR  = target_features_IR[0].shape[0]              # 获得目标域训练IR图像的数量。
         self.copy_save( labels_RGB, train_path_RGB, n_samples_RGB, config )  # 将目标域图像在伪标签文件夹下进行存储，同事
@@ -2038,6 +2046,8 @@ class HICMDPP(nn.Module):
         self.copy_save_gt( config ) 
         return
 
+
+    
 
 
     def ChangeLabel(self, NewLabelList, Changedlabels ):
@@ -2053,14 +2063,9 @@ class HICMDPP(nn.Module):
 
     def KmeansClustering(self,train_feature, ClusterNum):
         n_samples           = train_feature.shape[0]  # 获得特征的数量。
-        train_feature_clone = train_feature.clone()
-        train_dist          = torch.mm( train_feature_clone, torch.transpose(train_feature, 0, 1) )
-        train_dist          = re_ranking_one(train_dist.cpu().numpy())
-        train_dist          = np.maximum(train_dist, 0)
-        kmeans              = MiniBatchKMeans(n_clusters = ClusterNum).fit(train_dist)
+        kmeans              = MiniBatchKMeans(n_clusters = ClusterNum).fit(train_feature)
         labels              = kmeans.labels_
         kmeansCenter        = kmeans.cluster_centers_
-
 
         return labels, kmeansCenter
 

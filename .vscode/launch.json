@@ -12,8 +12,8 @@
             "console": "integratedTerminal",          
 
             "justMyCode": false,
-            "args": ["--data_name", "RegDB_01", "--name_output", "train", "--flag_exp", "1"] 
-            //"args": ["--data_name", "RegDB_01", "--name_output", "train", "--flag_exp", "1", "--resume_dir", "./pretrained/checkpoints/", "--resume_name", "last"]
+            //"args": ["--data_name", "RegDB_01", "--name_output", "train", "--flag_exp", "1"] 
+            "args": ["--data_name", "RegDB_01", "--name_output", "train", "--flag_exp", "1", "--resume_dir", "./pretrained/checkpoints/", "--resume_name", "last"]
 
             // 使用pretrain中的模型，来训练。
             //"args": ["--data_name", "RegDB_01", "--name_output", "train_pre2", "--flag_exp", "1", "--resume_dir", "./pretrained/checkpoints/", "--resume_name", "last"]
@@ -25,7 +25,7 @@
             //"args": ["--data_name", "RegDB_01", "--test_only", "True", "--test_dir", "./model/RegDB_01/train_dom_base/", "--test_name", "last", "--flag_exp", "1", "--resume_dir", "./model/RegDB_01/train_dom_base/checkpoints/", "--resume_name", "last"]
 
             //"--resume_dir", "./pretrained/checkpoints/", "--resume_name", "last"  要加载的模型位置和名字。
-            // "args": ["--data_name", "RegDB_01", "--flag_exp", "1", "--test_only", "True", "--test_dir", "./pretrained/", "--test_name", "last", "--resume_dir", "./pretrained/checkpoints/", "--resume_name", "last"]
+            //"args": ["--data_name", "RegDB_01", "--flag_exp", "1", "--test_only", "True", "--test_dir", "./pretrained/", "--test_name", "last", "--resume_dir", "./pretrained/checkpoints/", "--resume_name", "last"]
         }
     ]
 }

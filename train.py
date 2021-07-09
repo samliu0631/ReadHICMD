@@ -12,7 +12,7 @@ from reIDmodel_others import *
 from trainer import HICMD
 from collections import namedtuple
 
-from HicmdPP import * # added by sam.
+from S_HicmdPP import * # added by sam.
 version =  torch.__version__
 
 # 输入参数的定义
@@ -194,7 +194,7 @@ for epoch in range(opt.num_epoch):  # 从0到opt.num_epoch进行遍历。
 
                 # test
                 result, result_RAM, result_multi = extract_test_features(opt, trainer, dataloaders, data_info)
-                if opt.test_tsne:
+                if opt.test_tsne: # opt.test_tsne =False
                     with torch.no_grad():
                         feat_tsne, _ = extract_feature(opt, trainer, dataloaders_train_tsne, 'train_tsne',
                                                        data_info['train_tsne_modal'], data_info['train_tsne_cam'])

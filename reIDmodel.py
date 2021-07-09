@@ -45,15 +45,16 @@ class ClassBlock(nn.Module):
                  num_bottleneck=512, add_feature = 0, linear=True, return_f = False,\
                  ID_norm = 'bn', ID_act = 'lrelu', w_lrelu = 0.2):
         super(ClassBlock, self).__init__()
-        self.return_f = return_f
+        self.return_f = return_f # True
         add_block = []
-        if linear:
-            add_block += [nn.Linear(input_dim, num_bottleneck)]
+        if linear: # linear = True
+            add_block += [nn.Linear(input_dim, num_bottleneck)]  # input_dim:2048    num_bottleneck:2048. nn.Linear:对应全连接层。
         else:
             num_bottleneck = input_dim
-        if bnorm:
+        if bnorm: # bnorm = True    ID_norm = 'bn'
             if ID_norm == 'bn':
-                add_block += [nn.BatchNorm1d(num_bottleneck)]
+                add_block += [nn.BatchNorm1d(num_bottleneck)] # num_bottleneck:2048 
+                # batchnorm1d:为了使得神经网络的输入保持相同的分布。
             elif ID_norm == 'in':
                 add_block += [nn.InstanceNorm1d(num_bottleneck)]
             elif ID_norm == 'ln':
@@ -64,30 +65,33 @@ class ClassBlock(nn.Module):
                 add_block = None
             else:
                 assert 0, "Unsupported normalization: {}".format(ID_norm)
-        # initialize activation
+        # initialize activation # ID_act = 'lrelu'
         if ID_act == 'relu':
             add_block += [nn.ReLU(inplace=True)]
-        elif ID_act == 'lrelu':
-            add_block += [nn.LeakyReLU(w_lrelu, inplace=True)]
+        elif ID_act == 'lrelu': 
+            add_block += [nn.LeakyReLU(w_lrelu, inplace=True)] # w_lrelu = 0.2
         elif ID_act == 'prelu':
             add_block += [nn.PReLU()]
         elif ID_act == 'selu':
             add_block += [nn.SELU(inplace=True)]
         elif ID_act == 'tanh':
             add_block += [nn.Tanh()]
-        elif ID_act == 'none':
+        elif ID_act == 'none': # 实际执行这部分。
             print('.')
         else:
             assert 0, "Unsupported activation: {}".format(ID_act)
         if droprate>0:
-            add_block += [nn.Dropout(p=droprate)]
+            add_block += [nn.Dropout(p=droprate)] 
+            # nn.Dropout:可以用来防止过拟合。
 
-        add_block = nn.Sequential(*add_block)
-        add_block.apply(weights_init_kaiming)
+        add_block = nn.Sequential(*add_block) # nn.Sequential：创建一个有序容器。 *可以用来表示多个输入参数
+        add_block.apply(weights_init_kaiming)  # 进行参数的初始化。
 
-        self.add_feature = add_feature
+        self.add_feature = add_feature # add_feature=1024
         if add_feature > 0:
-            add_block2 = [nn.Linear(num_bottleneck, add_feature)]
+            add_block2 = [nn.Linear(num_bottleneck, add_feature)] 
+            # num_bottleneck = 2048 ; add_feature = 1024
+            
             # add_block2 += [nn.BatchNorm1d(num_bottleneck)]
             # add_block2 += [nn.LeakyReLU(0.1)]
             # add_block2 += [nn.Dropout(p=droprate)]
@@ -98,23 +102,23 @@ class ClassBlock(nn.Module):
         # linear, BN, dropout, classifier
 
         classifier = []
-        classifier += [nn.Linear(num_bottleneck, class_num)]
+        classifier += [nn.Linear(num_bottleneck, class_num)] # num_bottleneck = 2048  class_num = 206
         classifier = nn.Sequential(*classifier)
         classifier.apply(weights_init_classifier)
 
         self.add_block = add_block
         self.classifier = classifier
     def forward(self, x):
-        x = self.add_block(x) # [b, 512]
-
+        x = self.add_block(x) # [b, 512]  # x:20*2048   首先经过 全连接层， batchnorm， dropout层。
+        # 输入是2048维度， 输出也是2048维度。
         if self.return_f:
-            f = x
+            f = x # 记录2048维度的x
             if self.add_feature > 0:
-                f2 = self.add_block2(x)
+                f2 = self.add_block2(x) # f2: 20*1024   从2048到1024维度的全连接映射。
             else:
                 f2 = []
-            x = self.classifier(x) # [b, num_classes]
-            return x, f, f2
+            x = self.classifier(x) # [b, num_classes]  # 20*206  从2048到206的映射。
+            return x, f, f2  # 返回 x：分类结果。  f：2048维度的特征。 f2： 1024维的特征。
         else:
             x = self.classifier(x)
             return x
@@ -276,14 +280,23 @@ class ft_classifier(nn.Module):
 
     def __init__(self, input_dim, class_num, droprate, fc1, fc2, bnorm, ID_norm, ID_act, w_lrelu, return_f = True):
         super(ft_classifier, self).__init__()
-
+        # input_dim:2048 ;
+        # class_num:206 ;  
+        # droprate:0.5 ; 
+        # fc1:2048 ; 
+        # fc2:1024 ; 
+        # bnorm:True ;
+        # ID_norm:bn ;
+        # ID_act:none ;  
+        # w_lrelu:0.3 ;
+        # return_f=True ;
         self.classifier = ClassBlock(input_dim, class_num, droprate, num_bottleneck=fc1, add_feature=fc2, bnorm=bnorm,
                                      return_f=return_f, ID_norm=ID_norm, ID_act=ID_act, w_lrelu = w_lrelu)
 
 
     def forward(self, x, alpha = -1):
-        if alpha == -1: # basic
-            output, f_fc1, f_fc2 = self.classifier(x)
+        if alpha == -1: # basic # 执行如下部分。
+            output, f_fc1, f_fc2 = self.classifier(x) # 返回output:分类结果。f_fc1: 2048维度的特征。 f_fc2: 1024维的特征。
             return output, f_fc1, f_fc2
         else:
             x = ReverseLayerF.apply(x, alpha) # [128, 800]
