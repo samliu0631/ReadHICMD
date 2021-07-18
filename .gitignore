@@ -16,3 +16,5 @@ features_SYSU_RGB.pt
 Label_SYSU_IR.pt
 Label_SYSU_RGB.pt
 .data_sampler.py.swp
+features_RegDB_01_IR.pt
+features_RegDB_01_RGB.pt

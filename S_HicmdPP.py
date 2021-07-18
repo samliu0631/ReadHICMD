@@ -1917,9 +1917,9 @@ class HICMDPP(nn.Module):
         return image_datasets, dataloaders , data_info
 
 
-    def  ExtractFeaturesFromTargetDomain(self, opt, dataloaders, data_info):
+    def  ExtractFeaturesFromTargetDomain(self, opt, dataloaders, data_info,Target_data_name):
         # extract features #################################################
-        featurename_IR = "features_SYSU_IR.pt" # 用于保存目标域特征的文件名称。
+        featurename_IR = "features_"+Target_data_name+"_IR.pt" # 用于保存目标域特征的文件名称。
         if os.path.exists(featurename_IR):
             target_features_IR = torch.load(featurename_IR)           
         else:           
@@ -1928,7 +1928,7 @@ class HICMDPP(nn.Module):
                 data_info['train_all_IR_modal'], data_info['train_all_IR_cam'])   
             torch.save( target_features_IR, featurename_IR )
 
-        featurename_RGB = "features_SYSU_RGB.pt" # 用于保存目标域特征的文件名称。
+        featurename_RGB = "features_"+Target_data_name+"_RGB.pt" # 用于保存目标域特征的文件名称。
         if os.path.exists(featurename_RGB):
             target_features_RGB = torch.load(featurename_RGB)           
         else:           
@@ -1944,20 +1944,21 @@ class HICMDPP(nn.Module):
     def generate_pseudo_label(self,opt,config):
         # 切换为测试模式。
         self.eval()
-        Target_data_name = "SYSU"
-        # Target_data_name = "RegDB_01"
+        #Target_data_name = "SYSU"
+        Target_data_name = "RegDB_01"
+        ClassNum = 206  # RegDB 206
 
         # 准备数据集合
         image_datasets, dataloaders , data_info = self.GenerateDataloaderDataInfo( opt ,Target_data_name )
         
         # 提取特征
-        target_features_IR, target_features_RGB = self.ExtractFeaturesFromTargetDomain(opt, dataloaders, data_info)
+        target_features_IR, target_features_RGB = self.ExtractFeaturesFromTargetDomain(opt, dataloaders, data_info,Target_data_name)
 
         # 切换回训练模式。
         self.train()
 
         # 对特征进行分组 clustering ############################################
-        ClassNum = 395
+        
         # 根据提取的特征，进行图像的分组。
         labels_IR , IR_Centers    = self.KmeansClustering(target_features_IR[0], ClassNum )
         # 根据提取的特征，进行图像的分组。
@@ -2008,15 +2009,15 @@ class HICMDPP(nn.Module):
         # 根据最小的分组，来进行分类的匹配。
         NewLabelList = [] 
         MinClassDist = [] 
-        UseFlag      = np.zeros(LargerClassNum)
+        #UseFlag      = np.zeros(LargerClassNum)
         for i in range(MinimumClassNum):
             CurRef   = np.array( RefFeatureList[i] )
             MinDist  = 100000
             Index    = -1 
             for j in range(LargerClassNum):
                 # 如果该类已经匹配过，就跳过。
-                if UseFlag[j]==1:
-                    continue
+                #if UseFlag[j]==1:
+                #    continue
                 CurCom   = np.array( ComFeatureList[j] )
                 FeatDist = np.sqrt( np.sum( ( CurRef - CurCom ) **2 ) )
                 if FeatDist < MinDist  :
@@ -2026,7 +2027,7 @@ class HICMDPP(nn.Module):
             # 记录对应的IR图像分类标签。
             MinClassDist.append( MinDist )
             NewLabelList.append( Index )
-            UseFlag[Index] = 1
+            #UseFlag[Index] = 1
         #
         Changedlabels = self.ChangeLabel(NewLabelList,Changedlabels)
 

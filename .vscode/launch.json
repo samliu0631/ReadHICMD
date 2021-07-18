@@ -13,6 +13,8 @@
 
             "justMyCode": false,
             //"args": ["--data_name", "RegDB_01", "--name_output", "train", "--flag_exp", "1"] 
+
+            // HicmdPP 训练命令行。
             "args": ["--data_name", "RegDB_01", "--name_output", "train", "--flag_exp", "1", "--resume_dir", "./pretrained/checkpoints/", "--resume_name", "last"]
 
             // 使用pretrain中的模型，来训练。

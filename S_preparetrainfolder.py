@@ -1,8 +1,8 @@
 import os
 from shutil import copyfile
 
-#download_path      = 'E:/WorkSpace/Data/HICMDDownload/data/RegDB_01'
-download_path      = '/home/tianyu/code/SamWorkSpace/HiCMD-master/data/SYSU'
+#download_path      = '/home/tianyu/code/SamWorkSpace/HiCMD-master/data/SYSU'
+download_path      = '/home/tianyu/code/SamWorkSpace/HiCMD-master/data/RegDB_01'
 Train_path         = download_path + '/train_all'
 TrainRGB_save_path = download_path + '/train_all_RGB'
 TrainIR_save_path  = download_path + '/train_all_IR'

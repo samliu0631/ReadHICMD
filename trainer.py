@@ -72,8 +72,9 @@ class HICMD(nn.Module):
                                                 init = opt.G_init, w_lrelu = opt.G_w_lrelu)  # 初始化RGB图像的原型编码器
         gen_params += list(self.gen_RGB.enc_pro.parameters())
         self.gen_IR.enc_pro = copy.deepcopy(self.gen_RGB.enc_pro)  #初始化IR图像的原型编码器。
+        # 注意，红外和可见光的 原型编码器是两个独立的模型。
         gen_params += list(self.gen_IR.enc_pro.parameters())
-
+        
         # ********************** Decoder *********************************************************
         #  因为红外可见光被光照属性编码进行了描述，所以这里的解码器只有一个，IR和RGB都是用的相同的解码器。
         self.num_mlp_layer = 4
@@ -86,7 +87,7 @@ class HICMD(nn.Module):
                                            mlp_input = input_dim, mlp_output = 2 * self.gen_RGB.enc_pro.output_dim, mlp_dim = opt.G_mlp_dim, \
                                            mlp_n_blk = opt.G_mlp_n_blk, mlp_norm = 'none', mlp_activ = opt.G_act)
         gen_params += list(self.gen_RGB.dec.parameters())   # gen_params: 记录了ID-PIG中所有产生器的参数。
-        self.gen_IR.dec = self.gen_RGB.dec
+        self.gen_IR.dec = self.gen_RGB.dec  # 这里是浅拷贝。所以图像解码器共享参数的。
 
         # **********attribute indexing*************************************************************************
         dim = self.gen_RGB.enc_att.output_dim   # 获得RGB图像的属性编码其的输出维度。
