@@ -14,7 +14,8 @@ from collections import namedtuple
 import random as rn
 
 from S_HicmdPP import *      # added by sam.
-from S_util_pseudo import *  # added by sam.
+from S_dataloader import *   # added by sam.
+from S_GetConfig import *    # added by sam.
 
 version =  torch.__version__
 
@@ -46,20 +47,9 @@ dataloaders_Source, dataloaders_train_tsne_Source, old_train_dataloader_Source, 
 opt = opt_test_settings(opt)
 
 
-# 将目标训练集合中的数据按照红外和可见光进行分类。
-
-
-
-
-
 # Set the parameters
-config                       = {}
-config['max_round']          = 40
-config['adv_warm_max_round'] = 1
-config['lr2_ramp_factor']    = 60
-config['aa_drop']            = True     # Whether to drop the aa batch in self-training
-config['data_root_a']        = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/RegDB_01"
-output_directory             = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/MixDatasets"
+config           = get_config("./Configs/RegDB2SYSU.yaml")
+output_directory = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/MixDatasets"
 
 # 跨域训练config['max_round']轮
 for round_idx in range(config['max_round']): 
@@ -67,6 +57,7 @@ for round_idx in range(config['max_round']):
    round_output_directory = os.path.join(output_directory, str(round_idx))
    checkpoint_directory, image_directory, pseudo_directory = prepare_sub_folder_pseudo(round_output_directory)  # 设置断点，图像，和伪标签的存储路径。
    config['data_root'] = pseudo_directory  # 存储伪标签的存储路径。
+
 
    # At the round of adv_warm_max_round, we switch to self-training
    if round_idx == config['adv_warm_max_round']:   # config['adv_warm_max_round'] =1 
@@ -87,5 +78,12 @@ for round_idx in range(config['max_round']):
 
 
    ### Pseudo-label generation ###
-   trainer.generate_pseudo_label(opt,config)  # 在这里进行Pseudo-label的生成。这个是DGNet没有的。
-   #　目标域的训练图像就是train_all文件夹下面的所有图像。只是在使用的时候不利用文件夹名称的标签信息。而是通过特征聚类来分配标签。
+   # 这里用真实标签作为伪标签，目的在于测试模型是否能改善在目标域的测试结果。
+   GeneratepPreKnownPseudoCode( config )
+
+   # trainer.S_generate_pseudo_label(opt, config )  # 在这里进行Pseudo-label的生成。这个是DGNet没有的。
+   # 目标域的训练图像就是train_all文件夹下面的所有图像。只是在使用的时候不利用文件夹名称的标签信息。而是通过特征聚类来分配标签。
+
+   # 产生数据集加载器。
+   get_mix_data_loaders(opt, config)
+

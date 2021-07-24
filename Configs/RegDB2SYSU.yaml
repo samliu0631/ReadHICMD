@@ -1,0 +1,9 @@
+
+xx_port: 0.9                     # The portion of the single domain batch (src-src/target-taget, or AA/BB)
+ab_port: 0.1
+max_round: 40
+adv_warm_max_round: 1
+lr2_ramp_factor: 60
+aa_drop:    True
+data_root_a: /home/tianyu/code/SamWorkSpace/HiCMD-master/data/RegDB_01
+data_root_b: /home/tianyu/code/SamWorkSpace/HiCMD-master/data/SYSU
