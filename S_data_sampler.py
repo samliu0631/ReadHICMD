@@ -4,27 +4,35 @@ import numpy as np
 import random
 import torch
 
+# 用于区分训练集和中A类，B类，将B类标签类型加上classgap。
+ClassGap = 10000
 
-class S_PosNegSampler(datasets.ImageFolder):
+class S_PosNegSampler( datasets.ImageFolder ):
 
     def __init__(self,  root, idlist, transform, data_flag = 1, name_samping = 'RAND', num_pos = 4, num_neg = 0, opt = ''):
+        # root: 数据集路径。
+        # idlist: 真实使用的图像序号列表。
+        # transform: 图像变换
+        # data_flag: 数据标签。
+        # name_samping: 
+        # num_pos: 正向示例的数量。
+        # num_neg: 负向示例的数量。
+        # opt:   
+
         super(S_PosNegSampler, self).__init__(root, transform)
-        self.cams, self.real_labels, self.modals = get_attribute(data_flag, self.samples, flag = 0)
         # 获得数据集合中每张图像 对应的标签 和模态编号。
-
-
-        self.num_pos = num_pos  # 表示正向实例数量
-        self.num_neg = num_neg  # 表示负实例数量。
-        self.name_samping = name_samping  # ['P_PAIR', 'N_PAIR']
+        self.cams, self.real_labels, self.modals = get_attribute(data_flag, self.samples, flag = 0)
+        # 表示实际使用的图像序号。
+        self.id_list = idlist   
+        # 表示正向实例数量
+        self.num_pos = num_pos  
+        # 表示负实例数量。
+        self.num_neg = num_neg  
+        # ['P_PAIR', 'N_PAIR']
+        self.name_samping = name_samping  
         self.opt = opt
 
-    def _get_cam_id(self, path):
-        camera_id = []
-        filename = os.path.basename(path)
-        camera_id = filename.split('c')[1][0]
-        #camera_id = filename.split('_')[2][0:2]
-        return int(camera_id)-1
-
+   
     def _get_pair_pos_sample(self, index):
         # 找到和index 同一个类的图像 序号（剔除index）###################################################
         pos_index = np.argwhere(np.asarray(self.real_labels) == np.asarray(self.real_labels[index]))
@@ -63,11 +71,15 @@ class S_PosNegSampler(datasets.ImageFolder):
         IR_pivot_label_all.append(self.real_labels[IR_pivot_idx]) #　添加红外轴图像的类别号．
         cnt = 0
         is_find = False# self.opt.pos_mini_batch =2  表示正向图像的最小batch=2
-        if self.opt.pos_mini_batch > 1: # 从数据库中选择　和中心图像　不同类但同域的　1个标签　作为轴图像．
+        # 从数据库中选择　和中心图像　不同类 同域 同图像类别 的1个标签　作为轴图像．
+        if self.opt.pos_mini_batch > 1: 
             while not is_find:
-                selected_idx = int( IR_same_cam_idx[cnt] )  # 选择一张红外图像
-                if not self.real_labels[selected_idx] in IR_pivot_label_all: # 如果当前红外图像和中心红外图像不是一类。
-                    IR_pivot_idx_all.append(selected_idx)   # 记录当前和index不同类的红外图像
+                # 选择一张红外图像
+                selected_idx = int( IR_same_cam_idx[cnt] )  
+                # 如果当前红外图像和中心红外图像不是一类,但是是同一个域。
+                DomainFlag = ( IR_pivot_label_all[0]-ClassGap )*( self.real_labels[selected_idx]-ClassGap )>0
+                if ( not self.real_labels[selected_idx] in IR_pivot_label_all ) and DomainFlag: 
+                    IR_pivot_idx_all.append(selected_idx)   # 记录当前和index不同类的同域红外图像
                     IR_pivot_label_all.append(self.real_labels[selected_idx])  # 记录红外中心图像的标签．
                 if len(IR_pivot_idx_all) == self.opt.pos_mini_batch: #只有两个，两个红外不同类图像，包括index所在类．
                     is_find = True
@@ -188,11 +200,13 @@ class S_PosNegSampler(datasets.ImageFolder):
 
         return selected_pos_path, selected_pos_index
 
-    # 得到和pos不同类的两张RGB图像和两张IR图像。
+    # 得到和pos不同类但同域的两张RGB图像和两张IR图像。
     def _get_pair_neg_sample(self, pos_label, pos_cam):
         # pos_label:8个图像的标签，tensor类型。 pos_cam:0 相机的类型。
-        used_label = list(set(pos_label.tolist())) # 使用set()可以去掉重复的元素。 这里表示使用的类型标签。
-        rand_idx = np.random.permutation(len(self.real_labels))# 生成打乱后的 图像序号 列表。
+        # 使用set()可以去掉重复的元素。 这里表示使用的类型标签。
+        used_label = list(set(pos_label.tolist())) 
+        # 生成打乱后的 图像序号 列表。
+        rand_idx = np.random.permutation(len(self.real_labels))
 
         IR_idx_all = []
         RGB_idx_all = []
@@ -202,7 +216,8 @@ class S_PosNegSampler(datasets.ImageFolder):
         while not is_find:
             selected_idx = int(rand_idx[cnt])               # 遍历乱序图像序号 中的一个。
             selected_label = self.real_labels[selected_idx] # 获得当前图像的标签。
-            if not self.real_labels[selected_idx] in used_label: 
+            DomainFlag = ( used_label[0]-ClassGap )*( self.real_labels[selected_idx]-ClassGap )>0
+            if not self.real_labels[selected_idx] in used_label and DomainFlag:
                 # 如果当前图形 不在used_label中
                 if self.modals[selected_idx] == 1: # RGB 如果当前图像是RGB图像。
                     if len(RGB_idx_all) < self.opt.neg_mini_batch:
@@ -288,16 +303,23 @@ class S_PosNegSampler(datasets.ImageFolder):
         return selected_neg_path, selected_neg_index
 
 
-
-    def __getitem__(self, index):       # 这个函数定义了如何对数据集合进行数据的调用
-        ori_path, order = self.samples[index] #这里的order应该是按照顺序索引文件夹　得到的序号。
-        real_label = self.real_labels[index]   # 获得图片的真实标签。
-        cam = self.cams[index]#获得相机的编号。
-        modal = self.modals[index]# 获得图像模态编号。
+    # 这个函数定义了如何对数据集合进行数据的调用
+    def __getitem__(self, index):       
+        # 计算index索引号在 实际数据集合中的图像序号。
+        index = self.id_list[index]     
+        # 这里的order应该是按照顺序索引文件夹　得到的序号。
+        ori_path, order = self.samples[index] 
+        # 获得图片的真实标签。
+        real_label = self.real_labels[index]   
+        # 获得相机的编号。
+        cam = self.cams[index]
+        # 获得图像模态编号。
+        modal = self.modals[index]
         attribute = {'order':order, 'label':real_label, 'cam':cam, 'modal':modal}
         ori = self.loader(ori_path)  # 加载图像。 PIL格式。
         if self.transform is not None:
-            ori = self.transform(ori)  # 将图像转换为tensor格式。
+            # 将图像转换为tensor格式。
+            ori = self.transform(ori)  
 
         # self.num_pos= opt.samp_pos = 2
         if self.num_pos > 0:
@@ -404,6 +426,16 @@ class S_PosNegSampler(datasets.ImageFolder):
         # attribute_pos: 8张正向示例图像的标签等信息
         # attribute_neg: 负向示例图像的标签等信息。
 
+
+
+    # Brief: Get the image number of selected images in datasets. added by sam.
+    def __len__(self):
+        return len(self.id_list)
+
+
+
+
+
 def get_attribute(data_flag, img_samples, flag):
     # data_flag:   a  number，用来表示对那个数据集合进行操作。
     # img_samples:  list all the path and type of images.
@@ -434,6 +466,7 @@ def get_attribute(data_flag, img_samples, flag):
 
     return cams, labels, modals
 
+
 def get_cam(path, flag):# 通过图像的名称来判断图像的类型，即红外还是可见光。
     filename = os.path.basename(path)
     if flag == 1:  # Market1501
@@ -445,6 +478,14 @@ def get_cam(path, flag):# 通过图像的名称来判断图像的类型，即红
             return int(1)
     elif flag == 6: # SYSU
         return int(filename[filename.find('cam')+3])
+
+    elif flag == 7: # RegDB->SYSU  added by sam.
+        if filename[0] == 'T':  # Thermal : 0
+            return int(0)
+        else:
+            return int(1)
+
+
 
 def get_real_label(path, flag):
     filename = os.path.basename(path)
@@ -458,6 +499,13 @@ def get_real_label(path, flag):
         return int(path.split('/')[-2])   # 将图片所在文件夹的编号，作为分类标签。
     elif flag == 6: # SYSU
         return int(path.split('/')[-2])
+    elif flag == 7: # RegDB->SYSU         # added by sam.
+        filename   = path.split('/')[-2]
+        classIndex = filename.split('_')[1]
+        if filename[0]=='B':
+            return int( classIndex) + ClassGap   # B类目录，标签统一加上1000，用于区别于A类。
+        else:
+            return int( classIndex )   
 
 
 def gel_modal(path, flag):
@@ -469,8 +517,16 @@ def gel_modal(path, flag):
             return int(0)       # 根据图像首字符来判断图像的类型，是红外还是可见光。
         else:
             return int(1)
+
     elif flag == 6: # SYSU
         if filename[0] == 'T':  # Thermal : 0
             return int(0)
         else:
             return int(1)
+
+    elif flag == 7 : # RegDB->SYSU
+        if filename[0] == 'T':  # Thermal : 0
+            return int(0)
+        else:
+            return int(1)
+        

@@ -50,6 +50,7 @@ opt = opt_test_settings(opt)
 # Set the parameters
 config           = get_config("./Configs/RegDB2SYSU.yaml")
 output_directory = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/MixDatasets"
+epoch_round      = config['epoch_round_adv']
 
 # 跨域训练config['max_round']轮
 for round_idx in range(config['max_round']): 
@@ -85,5 +86,18 @@ for round_idx in range(config['max_round']):
    # 目标域的训练图像就是train_all文件夹下面的所有图像。只是在使用的时候不利用文件夹名称的标签信息。而是通过特征聚类来分配标签。
 
    # 产生数据集加载器。
-   get_mix_data_loaders(opt, config)
+   dataloaders_a, dataloaders_b = get_mix_data_loaders(opt, config)
+   print('Note that dataloader may hang with too much nworkers.')
+   mixData_size = 2 * min(  config['sample_a'],  config['sample_b']  )
+   config['epoch_iteration'] = mixData_size // config['batch_size']
+   print( 'Every epoch need %d iterations' % config['epoch_iteration'] )
 
+   # training
+   subiterations = 0
+   epoch_ridx = 0
+   while epoch_ridx < epoch_round:  
+      #for cnt, data in enumerate(dataloaders[phase])
+      for cnt, ( data_a, data_b ) in enumerate( zip( dataloaders_a, dataloaders_b) ):  
+         pass
+        
+ 

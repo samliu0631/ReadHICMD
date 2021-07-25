@@ -9,24 +9,28 @@ import torch
 from S_data_sampler import S_PosNegSampler
 
 
+
 # @Brief: 产生HICMDPP的训练数据加载器。
 def get_mix_data_loaders(opt,config):
     
     # 获得数据的图像序号列表。
     idx_la, idx_lb = get_mix_image_index(config)
+
     # 获得训练数据的路径。
     datapath = config['data_root'] + '/train_all'
     
-    # 获得
-    dataloaders_a = GetMixDataLoader(opt, datapath, idx_la )
-    dataloaders_b = GetMixDataLoader(opt, datapath, idx_lb )
+    # 获得数据集合加载器。
+    dataloaders_a   = GenerateMixDataLoader(opt, datapath, idx_la )
+    dataloaders_b   = GenerateMixDataLoader(opt, datapath, idx_lb )
 
     # 返回加载的数据。
     return dataloaders_a, dataloaders_b
 
 
-def GetMixDataLoader(opt, datapath, idlist ):
 
+
+def GenerateMixDataLoader(opt, datapath, idlist ):
+    data_flag = 7       # used for RegDB -> SYSU
     x = "train_all"
     # 用于对于图片数据的加载和预处理。
     transform_train_list = []  
@@ -44,14 +48,15 @@ def GetMixDataLoader(opt, datapath, idlist ):
     transform_train_list = transform_train_list + [transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
     # initial the class transforms.Compose and form instance.
     data_transforms = transforms.Compose(transform_train_list)  
-    # 
-    image_datasets = S_PosNegSampler(datapath,idlist,data_transforms, data_flag = opt.data_flag,
+    # 生成数据集合。
+    image_datasets = S_PosNegSampler(datapath, idlist, data_transforms, data_flag,
                                               name_samping = opt.name_samping, num_pos = opt.samp_pos, num_neg = opt.samp_neg, opt=opt)
-    
-    dataloaders = torch.utils.data.DataLoader(image_datasets, batch_size=opt.set_batchsize[x], shuffle=opt.set_shuffle[x],
-                                                            num_workers=opt.set_workers[x], pin_memory=opt.pin_memory, drop_last=opt.set_droplast[x])
-    
+    # 生成数据集合加载器。 这里因为通过idlist设置了数据集合的加载顺序，所以要设置 shuffle = false。
+    dataloaders = torch.utils.data.DataLoader(image_datasets, batch_size=opt.set_batchsize[x], shuffle = False,
+                                                            num_workers=opt.set_workers[x], pin_memory=opt.pin_memory, drop_last = True)
     return dataloaders
+
+
 
 
 
