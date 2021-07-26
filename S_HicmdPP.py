@@ -49,49 +49,74 @@ class HICMDPP(nn.Module):
         self.cnt_batch_ID = 0
         opt.old_apply_pos_cnt = opt.apply_pos_cnt
 
-        #******Discriminator 鉴别器参数设置。****************************************************************
-        dis_params = []
-        self.dis_RGB = Discriminator(opt)               # 根据opt来进行RGB鉴别器初始化。
-        dis_params += list(self.dis_RGB.parameters())   # dis_params  ：List, store the parameters of RGB and IR Discriminator.
-        self.dis_IR = copy.deepcopy(self.dis_RGB)       # deepcopy: the new object is a total new one with no relation with the reference.
-        dis_params += list(self.dis_IR.parameters())    # 记录鉴别器所有参数，这写参数都是需要进行训练优化的。
+        #****** Discriminator 鉴别器参数设置。****************************************************************
+        # 源域的鉴别器。
+        dis_params_a    = []
+        self.dis_RGB_a  = Discriminator(opt)               # 根据opt来进行RGB鉴别器初始化。
+        dis_params_a    += list(self.dis_RGB_a.parameters())   # dis_params_a  ：List, store the parameters of RGB and IR Discriminator.
+        self.dis_IR_a   = copy.deepcopy(self.dis_RGB_a)       # deepcopy: the new object is a total new one with no relation with the reference.
+        dis_params_a    += list(self.dis_IR_a.parameters())    # 记录鉴别器所有参数，这写参数都是需要进行训练优化的。
 
+        # 目标域的鉴别器。
+        self.dis_RGB_b  = self.dis_RGB_a  # 目标域和源域的鉴别器是共享参数的。
+        self.dis_IR_b   = self.dis_IR_a   # 目标域和源域的鉴别器是共享参数的。
+ 
         #********** Generator (attribute encoder)　属性编码器*************************************************************
-        gen_params = []
-        self.gen_RGB = nn.Module()  # RGB图像产生器。　这里的gen_RGB就是一个相对独立的神经网络。
-        self.gen_IR = nn.Module()   # IR图像产生器。　　gen_IR也是一个独立的神经网络。
-        self.gen_RGB.enc_att = ft_resnet(depth = opt.G_style_resnet_depth, pretrained = opt.G_style_pretrained, stride = opt.stride, partpool = opt.G_style_partpool, pooltype = opt.G_style_typepool, input_channel = opt.G_input_dim)
+        # 源域的属性编码器。
+        gen_params_a    = []
+        self.gen_RGB_a  = nn.Module()  # RGB图像产生器。　这里的gen_RGB就是一个相对独立的神经网络。
+        self.gen_IR_a   = nn.Module()   # IR图像产生器。　　gen_IR也是一个独立的神经网络。
+        self.gen_RGB_a.enc_att = ft_resnet(depth = opt.G_style_resnet_depth, pretrained = opt.G_style_pretrained, stride = opt.stride, partpool = opt.G_style_partpool, pooltype = opt.G_style_typepool, input_channel = opt.G_input_dim)
         # 这里是RGB图像的属性编码器Ea1。注意这里使用了resnet。
-        gen_params += list(self.gen_RGB.enc_att.parameters())    # gen_params记录所有　属性编码器　和　原型编码器　参数。        
-        self.gen_IR.enc_att = copy.deepcopy(self.gen_RGB.enc_att)  # 这里是IR图像的属性编码器Ea2。
-        gen_params += list(self.gen_IR.enc_att.parameters())
+        gen_params_a    += list(self.gen_RGB_a.enc_att.parameters())    # gen_params记录所有　属性编码器　和　原型编码器　参数。        
+        self.gen_IR_a.enc_att = copy.deepcopy(self.gen_RGB_a.enc_att)  # 这里是IR图像的属性编码器Ea2。
+        gen_params_a    += list(self.gen_IR_a.enc_att.parameters())
+
+        # 目标域的属性编码器。 源域和目标域的属性编码是独立的。  
+        gen_params_b    = []
+        self.gen_RGB_b  = copy.deepcopy(self.gen_RGB_a)
+        self.gen_IR_b   = copy.deepcopy(self.gen_IR_a)
+        gen_params_b    += list(self.gen_RGB_b.enc_att.parameters())
+        gen_params_b    += list(self.gen_IR_b.enc_att.parameters())
 
         #***************** Generator (prototype encoder)　原型编码器***************************************
+        # 源域的原型编码器。
         bottleneck_dim = opt.G_dim            
-        self.gen_RGB.enc_pro = ResidualEncoder(n_downsample = opt.G_n_downsamp, n_res = opt.G_n_residual, input_dim = opt.G_input_dim, \
+        # 初始化RGB图像的原型编码器
+        self.gen_RGB_a.enc_pro = ResidualEncoder(n_downsample = opt.G_n_downsamp, n_res = opt.G_n_residual, input_dim = opt.G_input_dim, \
                                                 bottleneck_dim = bottleneck_dim, norm = opt.G_enc_res_norm, activ = opt.G_act, pad_type = opt.G_pad_type, \
                                                 tanh = opt.G_tanh, res_type = opt.G_res_type, enc_type = opt.G_enc_type, flag_ASPP = opt.G_ASPP, \
-                                                init = opt.G_init, w_lrelu = opt.G_w_lrelu)  # 初始化RGB图像的原型编码器
-        gen_params += list(self.gen_RGB.enc_pro.parameters())
-        self.gen_IR.enc_pro = copy.deepcopy(self.gen_RGB.enc_pro)  #初始化IR图像的原型编码器。
-        gen_params += list(self.gen_IR.enc_pro.parameters())
+                                                init = opt.G_init, w_lrelu = opt.G_w_lrelu)  
+        gen_params_a            +=  list( self.gen_RGB_a.enc_pro.parameters() )
+        self.gen_IR_a.enc_pro   =   copy.deepcopy(self.gen_RGB_a.enc_pro )  #初始化IR图像的原型编码器。
+        gen_params_a            +=  list( self.gen_IR_a.enc_pro.parameters() )
+
+        # 目标域的原型编码器。 源域和目标域的原型编码器是共享的。
+        self.gen_RGB_b.enc_pro  = self.gen_RGB_a.enc_pro
+        self.gen_IR_b.enc_pro   = self.gen_IR_a.enc_pro
 
         # ********************** Decoder *********************************************************
         #  因为红外可见光被光照属性编码进行了描述，所以这里的解码器只有一个，IR和RGB都是用的相同的解码器。
-        self.num_mlp_layer = 4
-        input_dim = round(self.gen_RGB.enc_att.output_dim / self.num_mlp_layer)  # 解码器的输入维度 取决于  属性解码器。
-        self.flag_mlp = 2
-        self.gen_RGB.dec = ResidualDecoder(n_upsample=opt.G_n_downsamp, n_res=opt.G_n_residual, input_dim=self.gen_RGB.enc_pro.output_dim, \
+        self.num_mlp_layer  = 4
+        input_dim           = round( self.gen_RGB_a.enc_att.output_dim / self.num_mlp_layer )  # 解码器的输入维度 取决于  属性解码器。
+        self.flag_mlp       = 2
+        self.gen_RGB_a.dec  = ResidualDecoder(n_upsample=opt.G_n_downsamp, n_res=opt.G_n_residual, input_dim=self.gen_RGB_a.enc_pro.output_dim, \
                                            output_dim=opt.G_input_dim, dropout=opt.G_dropout, res_norm=opt.G_dec_res_norm, activ=opt.G_act, \
                                            pad_type=opt.G_pad_type, res_type=opt.G_res_type, non_local=opt.G_non_local, \
                                            dec_type=opt.G_dec_type, init=opt.G_init, w_lrelu = opt.G_w_lrelu, \
-                                           mlp_input = input_dim, mlp_output = 2 * self.gen_RGB.enc_pro.output_dim, mlp_dim = opt.G_mlp_dim, \
+                                           mlp_input = input_dim, mlp_output = 2 * self.gen_RGB_a.enc_pro.output_dim, mlp_dim = opt.G_mlp_dim, \
                                            mlp_n_blk = opt.G_mlp_n_blk, mlp_norm = 'none', mlp_activ = opt.G_act)
-        gen_params += list(self.gen_RGB.dec.parameters())   # gen_params: 记录了ID-PIG中所有产生器的参数。
-        self.gen_IR.dec = self.gen_RGB.dec
+        gen_params_a        += list(self.gen_RGB_a.dec.parameters())  # gen_params: 记录了ID-PIG中所有产生器的参数。
+        self.gen_IR_a.dec   = self.gen_RGB_a.dec                      # 红外可见光的图像解码器是 同一个 图像解码器。
+
+        # 目标域的图像解码器。 源域和目标域的图像解码器是相互独立的。
+        self.gen_RGB_b.dec  = copy.deepcopy( self.gen_RGB_a.dec )     # 深拷贝。
+        self.gen_IR_b.dec   = self.gen_RGB_b.dec                      # 浅拷贝。
+        gen_params_b        += list(self.gen_RGB_b.dec.parameters() ) # 记录目标域 的 图像解码器参数。
+
 
         # **********attribute indexing*************************************************************************
-        dim = self.gen_RGB.enc_att.output_dim   # 获得RGB图像的属性编码其的输出维度。
+        dim = self.gen_RGB_a.enc_att.output_dim   # 获得RGB图像的属性编码其的输出维度。
         
         self.att_style_idx = []    # 计算属性编码中   风格属性编码 和  ID无关属性编码（光照属性编码，姿态属性编码）的位置。
         # opt.G_n_residual = 4  number of residual blocks in content encoder/decoder
@@ -122,36 +147,53 @@ class HICMDPP(nn.Module):
 
         #***** prototype backbone **************************************************************************************
         id_dim = 0
-        input_dim = self.gen_RGB.enc_pro.output_dim   # 输入维度为  原型编码器的 输出维度。
-        self.backbone_pro = ft_resnet2(input_dim = input_dim, depth = opt.backbone_pro_resnet_depth, stride = opt.stride,\
+        input_dim = self.gen_RGB_a.enc_pro.output_dim   # 输入维度为  原型编码器的 输出维度。
+        # 源域backbone
+        self.backbone_pro_a = ft_resnet2(input_dim = input_dim, depth = opt.backbone_pro_resnet_depth, stride = opt.stride,\
                                                max_num_conv = opt.backbone_pro_max_num_conv, max_ouput_dim = opt.backbone_pro_max_ouput_dim, \
                                                pretrained = opt.backbone_pro_pretrained, partpool = opt.backbone_pro_partpool, pooltype = opt.backbone_pro_typepool)
+        # 目标域
+        self.backbone_pro_b = self.backbone_pro_a   # 共享参数
+
         # backbone_pro对应的也是一个网络。
-        id_dim += self.backbone_pro.output_dim
+        id_dim += self.backbone_pro_a.output_dim
         id_dim += self.att_style_dim
 
         if id_dim == 0:
             assert(False)
 
         # additional fc_layers (for CE, TRIP)
-        self.combine_weight = ft_weight()
-        self.id_classifier = ft_classifier(input_dim = id_dim, class_num = opt.nclasses, droprate = opt.droprate, fc1 = opt.fc1_channel, fc2 = opt.fc2_channel, \
+        self.combine_weight_a = ft_weight()
+        self.id_classifier_a = ft_classifier(input_dim = id_dim, class_num = opt.nclasses, droprate = opt.droprate, fc1 = opt.fc1_channel, fc2 = opt.fc2_channel, \
                                          bnorm = opt.bnorm, ID_norm = opt.ID_norm, ID_act = opt.ID_act, w_lrelu = opt.w_lrelu, return_f = True)
-        all_params = [{'params': list(self.id_classifier.parameters()), 'lr': opt.lr_backbone}]
-        all_params.append({'params': list(self.backbone_pro.parameters()), 'lr': opt.lr_backbone * opt.backbone_pro_lr_ratio})
-        all_params.append({'params': list(self.combine_weight.parameters()), 'lr': opt.lr_backbone * opt.combine_weight_lr_ratio})
+        self.combine_weight_b = self.combine_weight_a
+        self.id_classifier_b = self.id_classifier_a   # 两个分类器 是共享参数的。
 
+        all_params = [{'params': list(self.id_classifier_a.parameters()), 'lr': opt.lr_backbone}]
+        all_params.append({'params': list(self.backbone_pro_a.parameters()), 'lr': opt.lr_backbone * opt.backbone_pro_lr_ratio})
+        all_params.append({'params': list(self.combine_weight_a.parameters()), 'lr': opt.lr_backbone * opt.combine_weight_lr_ratio})
+
+        # Domain discriminator ########################################
+        
+        
+        
         #******************Optimizer and scheduler***************************************
 
-        # 这里定义了优化器和调度器。
+        # 这里定义了优化器和调度器。源域和目标域的优化器是一样的。
         self.id_optimizer = optim.SGD(all_params, weight_decay=opt.weight_decay_bb, momentum=opt.momentum,
                                       nesterov=opt.flag_nesterov)
-        # 根据dis_params 设置 鉴别器的优化器和调度器                                      
-        self.dis_optimizer = torch.optim.Adam([p for p in dis_params if p.requires_grad],
+          
+        # 目标域/源域 鉴别器优化器。 源域和目标域的鉴别器是共享参数的。                                
+        self.dis_optimizer = torch.optim.Adam([p for p in dis_params_a if p.requires_grad],
                                               lr=opt.lr_dis, betas=(opt.beta1, opt.beta2),
-                                              weight_decay=opt.weight_decay_dis)     
-        # 根据 gen_params 设置产生器的优化器和调度器。                                              
-        self.gen_optimizer = torch.optim.Adam([p for p in gen_params if p.requires_grad],
+                                              weight_decay=opt.weight_decay_dis)  
+
+        # 源域 属性编码器，原型编码器 和 图像解码器 的优化器。                                              
+        self.gen_optimizer_a = torch.optim.Adam([p for p in gen_params_a if p.requires_grad],
+                                              lr=opt.lr_gen, betas=(opt.beta1, opt.beta2),
+                                              weight_decay=opt.weight_decay_gen)
+        # 目标域 属性编码器 图像解码器的 优化器。
+        self.gen_optimizer_b = torch.optim.Adam([p for p in gen_params_b if p.requires_grad],
                                               lr=opt.lr_gen, betas=(opt.beta1, opt.beta2),
                                               weight_decay=opt.weight_decay_gen)
 
@@ -159,27 +201,33 @@ class HICMDPP(nn.Module):
 
         self.id_scheduler = lr_scheduler.StepLR(self.id_optimizer, step_size=opt.step_size_bb, gamma=opt.gamma_bb)
         self.dis_scheduler = lr_scheduler.StepLR(self.dis_optimizer, step_size=opt.step_size_dis, gamma=opt.gamma_dis)
-        self.gen_scheduler = lr_scheduler.StepLR(self.gen_optimizer, step_size=opt.step_size_gen, gamma=opt.gamma_gen)
+        self.gen_scheduler_a = lr_scheduler.StepLR(self.gen_optimizer_a, step_size=opt.step_size_gen, gamma=opt.gamma_gen)
+        self.gen_scheduler_b = lr_scheduler.StepLR(self.gen_optimizer_b, step_size=opt.step_size_gen, gamma=opt.gamma_gen)
 
         # set GPU
         if opt.use_gpu:
-            self.id_classifier = self.id_classifier.cuda()   # 将模型移到cuda上。
-            self.backbone_pro = self.backbone_pro.cuda()     
-            self.combine_weight = self.combine_weight.cuda()
-            self.gen_RGB = self.gen_RGB.cuda()
-            self.gen_IR = self.gen_IR.cuda()
-            self.dis_RGB = self.dis_RGB.cuda()
-            self.dis_IR = self.dis_IR.cuda()
+            self.id_classifier_a    = self.id_classifier_a.cuda()   # 将模型移到cuda上。
+            self.backbone_pro_a     = self.backbone_pro_a.cuda()     
+            self.combine_weight_a   = self.combine_weight_a.cuda()
+            self.gen_RGB_a  = self.gen_RGB_a.cuda()
+            self.gen_IR     = self.gen_IR_a.cuda()
+            self.gen_RGB_b  = self.gen_RGB_b.cuda()
+            self.gen_IR_b   = self.gen_IR_b.cuda()
+            self.dis_RGB_a  = self.dis_RGB_a.cuda()
+            self.dis_IR_a   = self.dis_IR_a.cuda()
             print('===> [Start training]' + '-' * 30)
             self.CE_criterion = nn.CrossEntropyLoss()
             self.NLL_criterion = nn.NLLLoss()
             self.etc_type['D_lr'] = self.dis_optimizer.param_groups[0]['lr']   # 优化器的 参数组。
-            self.etc_type['G_lr'] = self.gen_optimizer.param_groups[0]['lr']   
+            self.etc_type['G_lr'] = self.gen_optimizer_a.param_groups[0]['lr']   
             self.etc_type['ID_lr'] = self.id_optimizer.param_groups[0]['lr']
 
         self.edge = to_edge
         self.single = to_gray(False)
         self.rand_erasing = RandomErasing(probability=opt.CE_erasing_p, mean=[0.0, 0.0, 0.0])  # 设置随机擦除模型。
+
+
+
 
     def go_train(self, data, opt, phase, cnt, epoch):
         # data:一共6个元素，每个元素的尺度是 1×3×256×128
