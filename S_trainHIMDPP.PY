@@ -54,9 +54,11 @@ epoch_round      = config['epoch_round_adv']
 
 # 跨域训练config['max_round']轮
 for round_idx in range(config['max_round']): 
-   ### setup folders ####################################
+   
+   # setup folders 
    round_output_directory = os.path.join(output_directory, str(round_idx))
-   checkpoint_directory, image_directory, pseudo_directory = prepare_sub_folder_pseudo(round_output_directory)  # 设置断点，图像，和伪标签的存储路径。
+   # 设置断点，图像，和伪标签的存储路径。
+   checkpoint_directory, image_directory, pseudo_directory = prepare_sub_folder_pseudo(round_output_directory)  
    config['data_root'] = pseudo_directory  # 存储伪标签的存储路径。
 
 
@@ -70,20 +72,21 @@ for round_idx in range(config['max_round']):
       if config['aa_drop']:
             config['aa'] = False
 
-   ### Evaluate source model ###
-   if round_idx == 0: # 如果是第一轮训练，就需要加载预训练的模型。
-      # Load the pretrained HICMD model.
-      trainer = HICMDPP(opt) 
-      trainer.cnt_cumul = trainer.resume(opt)    
-      trainer.cuda()    # 将模型移动到cuda上。
-
+   trainer = HICMDPP( opt, config )   
+   trainer.cuda()   
+   if round_idx == 0:           
+      # Load the pretrained HICMD model.       
+      trainer.cnt_cumul = trainer.resume0(opt)             
+   else:
+      trainer.cnt_cumul = trainer.resume1(checkpoint_directory_prev)  
+      
 
    ### Pseudo-label generation ###
-   # 这里用真实标签作为伪标签，目的在于测试模型是否能改善在目标域的测试结果。
-   GeneratepPreKnownPseudoCode( config )
+   GeneratepPreKnownPseudoCode( config ) # 这里用真实标签作为伪标签，目的在于测试模型是否能改善在目标域的测试结果。
+   
+   # TODO: Finish the pseudo label generation.
+   # trainer.S_generate_pseudo_label(opt, config )  
 
-   # trainer.S_generate_pseudo_label(opt, config )  # 在这里进行Pseudo-label的生成。这个是DGNet没有的。
-   # 目标域的训练图像就是train_all文件夹下面的所有图像。只是在使用的时候不利用文件夹名称的标签信息。而是通过特征聚类来分配标签。
 
    # 产生数据集加载器。
    dataloaders_a, dataloaders_b = get_mix_data_loaders(opt, config)
@@ -97,7 +100,41 @@ for round_idx in range(config['max_round']):
    epoch_ridx = 0
    while epoch_ridx < epoch_round:  
       #for cnt, data in enumerate(dataloaders[phase])
+      trainer.train()  # change to train mode.
+
       for cnt, ( data_a, data_b ) in enumerate( zip( dataloaders_a, dataloaders_b) ):  
-         pass
-        
- 
+         order_a = data_a[3]['order']
+         order_b = data_b[3]['order']
+         
+         if order_a < config['ID_class_a'] and order_b < config['ID_class_a']:
+            print("aa")
+            trainer.go_train_aa(data_a, opt, 'train_all' , cnt, epoch_ridx)  
+            epoch_cnt = trainer.cnt_cumul  
+
+         elif order_a >= config['ID_class_a'] and order_b >= config['ID_class_a']:
+            print('bb')
+            # trainer.go_train_bb
+            epoch_cnt = trainer.cnt_cumul
+         
+         elif order_a < config['ID_class_a'] and order_b >= config['ID_class_a']:
+            print("ab")
+            # trainer.go_train_ab
+            epoch_cnt = trainer.cnt_cumul
+
+
+         elif order_a >= config['ID_class_a'] and order_b < config['ID_class_a']:
+            print("ba")
+            # trainer.go_train_ba
+            epoch_cnt = trainer.cnt_cumul
+
+
+         # 更新训练参数。
+         trainer.update_learning_rate(opt, 'train_all') 
+
+      # TODO： 理清更新关系，确定config的更新参数。
+      dataloaders_a, dataloaders_b = get_mix_data_loaders(opt, config)
+
+   trainer.save(checkpoint_directory)
+   # 更新模型加载路径。
+   checkpoint_directory_prev = checkpoint_directory        
+         
