@@ -108,22 +108,26 @@ for round_idx in range(config['max_round']):
          
          if order_a < config['ID_class_a'] and order_b < config['ID_class_a']:
             print("aa")
-            trainer.go_train_aa(data_a, opt, 'train_all' , cnt, epoch_ridx)  
+            mode_code = "aa"
+            trainer.go_train_mix(data_a, opt, 'train_all' , cnt, epoch_ridx, mode_code)  
             epoch_cnt = trainer.cnt_cumul  
 
          elif order_a >= config['ID_class_a'] and order_b >= config['ID_class_a']:
             print('bb')
-            # trainer.go_train_bb
+            mode_code = "bb"
+            trainer.go_train_mix(data_b, opt, 'train_all' , cnt, epoch_ridx, mode_code) 
             epoch_cnt = trainer.cnt_cumul
          
          elif order_a < config['ID_class_a'] and order_b >= config['ID_class_a']:
             print("ab")
+            mode_code ="ab"
             # trainer.go_train_ab
             epoch_cnt = trainer.cnt_cumul
 
 
          elif order_a >= config['ID_class_a'] and order_b < config['ID_class_a']:
             print("ba")
+            mode_code = "ba"
             # trainer.go_train_ba
             epoch_cnt = trainer.cnt_cumul
 

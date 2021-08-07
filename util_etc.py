@@ -164,7 +164,7 @@ class Timer:
 
 
 def opt_settings(opt):
-
+    
     #---------------------------------------# Common setting
     opt.phase_train = 'train'
     if opt.train_all:

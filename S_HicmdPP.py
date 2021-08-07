@@ -166,6 +166,11 @@ class HICMDPP(nn.Module):
 
         # additional fc_layers (for CE, TRIP)
         self.combine_weight_a   = ft_weight()
+        # Note:这里需要注意，分类器的输出需要和  为标签的类别数量相符。 所以需要动态设置。
+        # 
+        #class_num = opt.nclasses
+
+
         self.id_classifier_a    = ft_classifier(input_dim = id_dim, class_num = opt.nclasses, droprate = opt.droprate, fc1 = opt.fc1_channel, fc2 = opt.fc2_channel, \
                                          bnorm = opt.bnorm, ID_norm = opt.ID_norm, ID_act = opt.ID_act, w_lrelu = opt.w_lrelu, return_f = True)
         self.combine_weight_b   = self.combine_weight_a
@@ -238,8 +243,10 @@ class HICMDPP(nn.Module):
         self.rand_erasing = RandomErasing(probability=opt.CE_erasing_p, mean=[0.0, 0.0, 0.0])  # 设置随机擦除模型。
 
 
+    
+
     # 更新源域和目标域的参数训练。
-    def go_train_aa(self, data, opt, phase, cnt, epoch):   
+    def go_train_mix( self, data, opt, phase, cnt, epoch, mode_code ):   
         # data:一共6个元素，每个元素的尺度是 1×3×256×128
         # Batch sampler
         if phase in opt.phase_train:    # 如果 phase== "train_all"
@@ -251,16 +258,16 @@ class HICMDPP(nn.Module):
         self.is_pos = True if len(pos) > 0 else False  # is_pos用来判断 是否存在有效的pos    pos.shape = 1*8*3*256*128
         self.is_neg = True if len(neg) > 0 else False  # is_neq用来判断 是否存在有效的neg。  neg.shape = 1*4*3*256*128
 
-        pos_all = pos[0]                            # pos_all:  维度8×3×256×128， 所以共计有8个分组。(the first and only element in pos)
-        pos_label_all = attribute_pos['order'][0]   # 维度 8维向量。  用图片所在文件夹名称 表示编号。
-        pos_cam_all = attribute_pos['cam'][0]       # 8维向量。
-        pos_modal_all = attribute_pos['modal'][0]   # 8维向量。
-        num_pos = pos_all.size(0)                   # num_pos = 8 .
+        pos_all        = pos[0]                       # pos_all:  维度8×3×256×128， 所以共计有8个分组。(the first and only element in pos)
+        pos_label_all  = attribute_pos['order'][0]    # 维度 8维向量。  用图片所在文件夹名称 表示编号。
+        pos_cam_all    = attribute_pos['cam'][0]      # 8维向量。
+        pos_modal_all  = attribute_pos['modal'][0]    # 8维向量。
+        num_pos        = pos_all.size(0)              # num_pos = 8 .
 
-        pos_a1_idx = [x for x in range(num_pos) if x % 4 == 0]   # pos_a1_idx = [0 4]      # num_pos =8. range(num_pos): 0 1 2 3 4 5 6 7
-        pos_a2_idx = [x for x in range(num_pos) if x % 4 == 1]   # pos_a2_idx = [1,5]
-        pos_b1_idx = [x for x in range(num_pos) if x % 4 == 2]   # pos_b1_idx = [2,6]
-        pos_b2_idx = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7]
+        pos_a1_idx     = [x for x in range(num_pos) if x % 4 == 0]   # pos_a1_idx = [0 4]      # num_pos =8. range(num_pos): 0 1 2 3 4 5 6 7
+        pos_a2_idx     = [x for x in range(num_pos) if x % 4 == 1]   # pos_a2_idx = [1,5]
+        pos_b1_idx     = [x for x in range(num_pos) if x % 4 == 2]   # pos_b1_idx = [2,6]
+        pos_b2_idx     = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7]
 
         x_a1 = pos_all[pos_a1_idx]    # 获取pos_all中 第0,4个元素。   这个x_a1, x_a2 表示的是3*256*128的图像。和文献第4章对应。
         x_a2 = pos_all[pos_a2_idx]    # 获取pos_all中 第1,5的元素。  对于正向例子，每个是2张图。
@@ -323,9 +330,17 @@ class HICMDPP(nn.Module):
             self.cams_b = cams_b1
             self.case_a = case_a1        # 'RGB'
             self.case_b = case_b1        # 'IR'
-            self.dis_update_aa(x_a1, x_b1, opt, phase)                 # x_a1  x_b1都是2张图片。
-            # TODO: 修改gen_update
-            self.gen_update_aa(x_a1, x_b1, neg_a, neg_b, opt, phase)   # 对整个模型进行更新。
+
+            if   mode_code == "aa":
+                self.dis_update_aa(x_a1, x_b1, opt, phase)                 
+                self.gen_update_aa(x_a1, x_b1, neg_a, neg_b, opt, phase)   
+            elif mode_code == "bb":
+                self.dis_update_bb(x_a1, x_b1, opt, phase)                 
+                self.gen_update_bb(x_a1, x_b1, neg_a, neg_b, opt, phase)
+            elif mode_code == "ab":
+                pass
+            elif mode_code == "ba":
+                pass
 
         # 存储损失函数结果。
         for key, value in self.loss_type.items():
@@ -374,6 +389,7 @@ class HICMDPP(nn.Module):
         if Do_dis_update:
             # 始终是要执行这一部分。
             if self.zero_grad_D:  
+                self.dom_dis_opt.zero_grad()
                 self.dis_optimizer.zero_grad()   # 优化前，把梯度置零。
                 self.zero_grad_D = False
 
@@ -425,8 +441,46 @@ class HICMDPP(nn.Module):
             self.loss_dis_b3 = self.dis_b.calc_dis_loss(x_ab3.detach(), Gx_b_raw)
             self.loss_dis_total += opt.w_gan * (self.loss_dis_a3 + self.loss_dis_b3)   # 记录对抗生成损失。
 
+            # 域鉴别器损失函数计算。--------------------------------------------------------
+            c_a_id, _ = self.backbone_pro_a(c_a, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
+            c_b_id, _ = self.backbone_pro_a(c_b, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
 
+            # Extract the style attribute codes.
+            s_a_id = torch_gather(s_a2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
+            s_b_id = torch_gather(s_b2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
 
+            # Nomilize the protetype and style attribute code.
+            c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))  # 将原型编码进行单位化。
+            s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))  # 将风格属性编码进行单位化。
+            c_b_id_norm = c_b_id.div(torch.norm(c_b_id, p=2, dim=1, keepdim=True).expand_as(c_b_id))  # 将原型编码进行单位化。
+            s_b_id_norm = s_b_id.div(torch.norm(s_b_id, p=2, dim=1, keepdim=True).expand_as(s_b_id))  # 将风格属性编码进行单位化。
+
+            # Combine the style attribute codes and the protetype codes.
+            c_a_id_norm *= min(self.combine_weight_a.multp, 1.0)
+            s_a_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
+            f0_a = torch.Tensor().cuda()
+            f0_a = torch.cat((f0_a, c_a_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+            f0_a = torch.cat((f0_a, s_a_id_norm), dim=1)
+            _, f1_a, _ = self.id_classifier_a(f0_a)
+
+            c_b_id_norm *= min(self.combine_weight_a.multp, 1.0)
+            s_b_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
+            f0_b = torch.Tensor().cuda()
+            f0_b = torch.cat((f0_b, c_b_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+            f0_b = torch.cat((f0_b, s_b_id_norm), dim=1)
+            _, f1_b, _ = self.id_classifier_a(f0_b)
+
+            #Calculate the domain discrimintor loss.
+            self.loss_id_dis_ab, _, _ = self.dom_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
+            # 缺少参数。
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab
+            
+            
+            #----------------------------------------------------------------------------------------------
+            # Update the parameters
+            self.loss_id_dis_total.backward()    # domain discriminator loss backward.
+            self.dom_dis_opt.step()   # optimize the domain discriminator.
+            
             self.loss_dis_total.backward(retain_graph=False) #*****GPU memory --> 40Mb / ?/ -60Mb
             # 根据损失函数，进行反向回传。计算discriminator中参数对应于对抗损失函数的梯度。
             self.dis_optimizer.step() #*****GPU memory --> 100Mb / 0
@@ -435,17 +489,20 @@ class HICMDPP(nn.Module):
 
             self.loss_type['D_a'] = opt.w_gan * self.loss_dis_a.item()  # scalar  
             self.loss_type['D_b'] = opt.w_gan * self.loss_dis_b.item()  # 存储损失函数
-            self.loss_type['TOT_D'] = self.loss_dis_total.item()       # 存储总的损失函数
+            self.loss_type['TOT_D'] = self.loss_dis_total.item()        # 存储总的损失函数
+            self.loss_type['D_domain'] = self.loss_id_dis_total.item()  # 存储域鉴别器损失函数
 
         else:
             try:
                 self.loss_type['D_a'] = self.old_loss_type['D_a']
                 self.loss_type['D_b'] = self.old_loss_type['D_b']
                 self.loss_type['TOT_D'] = self.old_loss_type['TOT_D']
+                self.loss_type['D_domain'] = self.old_loss_type['D_domain']
             except:
                 self.loss_type['D_a'] = 0
                 self.loss_type['D_b'] = 0
                 self.loss_type['TOT_D'] = 0
+                self.loss_type['D_domain'] = 0
 
         if self.case_a == 'RGB':
             self.dis_RGB_a = self.dis_a  # 将优化更新后的鉴别器传回 原来的HICMD对象中。
@@ -470,21 +527,21 @@ class HICMDPP(nn.Module):
 
         # 这个函数是go_train中主要调用的函数。   这里的x_a，x_b都是两张图。
         if self.case_a == 'RGB':
-            self.dis_a = self.dis_RGB     # RGB图像的鉴别器。
-            self.gen_a = self.gen_RGB     # RGB图像的图像生成器。
+            self.dis_a = self.dis_RGB_a     # RGB图像的鉴别器。
+            self.gen_a = self.gen_RGB_a     # RGB图像的图像生成器。
         elif self.case_a == 'IR':
-            self.dis_a = self.dis_IR      # IR图像的鉴别器。
-            self.gen_a = self.gen_IR 
+            self.dis_a = self.dis_IR_a      # IR图像的鉴别器。
+            self.gen_a = self.gen_IR_a 
         else:
             assert(False)
 
 
         if self.case_b == 'RGB':
-            self.dis_b = self.dis_RGB
-            self.gen_b = self.gen_RGB
+            self.dis_b = self.dis_RGB_a
+            self.gen_b = self.gen_RGB_a
         elif self.case_b == 'IR':
-            self.dis_b = self.dis_IR
-            self.gen_b = self.gen_IR
+            self.dis_b = self.dis_IR_a
+            self.gen_b = self.gen_IR_a
         else:
             assert(False)
 
@@ -518,7 +575,7 @@ class HICMDPP(nn.Module):
             Gx_b_raw = Gx_b.clone()    # 对输入图像进行复制。
 
             if self.zero_grad_G:
-                self.gen_optimizer.zero_grad()
+                self.gen_optimizer_a.zero_grad()
                 self.zero_grad_G = False
 
             c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码 生成原型编码c_a。  2 * 256 * 64 * 32
@@ -681,43 +738,43 @@ class HICMDPP(nn.Module):
             s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)
             s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)
 
-            c_a_id = self.backbone_pro(c_a_id)  # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。
+            c_a_id = self.backbone_pro_a(c_a_id)  # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。
             s_a_id_raw = s_a_id.clone()
             s_a_id = torch_gather(s_a_id, self.att_style_idx, 1)   # 从2048维度的向量中提取1024维度的 风格 属性编码
 
             c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))
             s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))
 
-            self.etc_type['combine_w'] = self.combine_weight.multp.item()
-            c_a_id_norm *= min(self.combine_weight.multp, 1.0)
-            s_a_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
+            self.etc_type['combine_w'] = self.combine_weight_a.multp.item()
+            c_a_id_norm *= min(self.combine_weight_a.multp, 1.0)
+            s_a_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
 
-            c_b_id = self.backbone_pro(c_b_id)
+            c_b_id = self.backbone_pro_a(c_b_id)
             s_b_id = torch_gather(s_b_id, self.att_style_idx, 1)
 
             c_b_id_norm = c_b_id.div(torch.norm(c_b_id, p=2, dim=1, keepdim=True).expand_as(c_b_id))
             s_b_id_norm = s_b_id.div(torch.norm(s_b_id, p=2, dim=1, keepdim=True).expand_as(s_b_id))
 
-            c_b_id_norm *= min(self.combine_weight.multp, 1.0)
-            s_b_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
+            c_b_id_norm *= min(self.combine_weight_a.multp, 1.0)
+            s_b_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
 
-            c_a_recon_id = self.backbone_pro(c_a_recon_id)
+            c_a_recon_id = self.backbone_pro_a(c_a_recon_id)
             s_a_recon_id = torch_gather(s_a_recon_id, self.att_style_idx, 1)
 
             c_a_recon_id_norm = c_a_recon_id.div(torch.norm(c_a_recon_id, p=2, dim=1, keepdim=True).expand_as(c_a_recon_id))
             s_a_recon_id_norm = s_a_recon_id.div(torch.norm(s_a_recon_id, p=2, dim=1, keepdim=True).expand_as(s_a_recon_id))
 
-            c_a_recon_id_norm *= min(self.combine_weight.multp, 1.0)
-            s_a_recon_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
+            c_a_recon_id_norm *= min(self.combine_weight_a.multp, 1.0)
+            s_a_recon_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
 
-            c_b_recon_id = self.backbone_pro(c_b_recon_id)
+            c_b_recon_id = self.backbone_pro_a(c_b_recon_id)
             s_b_recon_id = torch_gather(s_b_recon_id, self.att_style_idx, 1)
 
             c_b_recon_id_norm = c_b_recon_id.div(torch.norm(c_b_recon_id, p=2, dim=1, keepdim=True).expand_as(c_b_recon_id))
             s_b_recon_id_norm = s_b_recon_id.div(torch.norm(s_b_recon_id, p=2, dim=1, keepdim=True).expand_as(s_b_recon_id))
 
-            c_b_recon_id_norm *= min(self.combine_weight.multp, 1.0)
-            s_b_recon_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
+            c_b_recon_id_norm *= min(self.combine_weight_a.multp, 1.0)
+            s_b_recon_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
 
 
             if self.is_neg:
@@ -740,8 +797,8 @@ class HICMDPP(nn.Module):
                 s_a_neg_id = self.gen_a.enc_att(y_a_re_id)
                 s_b_neg_id = self.gen_b.enc_att(y_b_re_id)
 
-                c_a_neg_id = self.backbone_pro(c_a_neg_id)
-                c_b_neg_id = self.backbone_pro(c_b_neg_id)
+                c_a_neg_id = self.backbone_pro_a(c_a_neg_id)
+                c_b_neg_id = self.backbone_pro_a(c_b_neg_id)
 
                 s_a_neg_id = torch_gather(s_a_neg_id, self.att_style_idx, 1)
                 s_b_neg_id = torch_gather(s_b_neg_id, self.att_style_idx, 1)
@@ -751,11 +808,11 @@ class HICMDPP(nn.Module):
                 c_b_neg_id_norm = c_b_neg_id.div(torch.norm(c_b_neg_id, p=2, dim=1, keepdim=True).expand_as(c_b_neg_id))
                 s_b_neg_id_norm = s_b_neg_id.div(torch.norm(s_b_neg_id, p=2, dim=1, keepdim=True).expand_as(s_b_neg_id))
 
-                self.etc_type['combine_w'] = self.combine_weight.multp.item()
-                c_a_neg_id_norm *= min(self.combine_weight.multp, 1.0)
-                s_a_neg_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
-                c_b_neg_id_norm *= min(self.combine_weight.multp, 1.0)
-                s_b_neg_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
+                self.etc_type['combine_w'] = self.combine_weight_a.multp.item()
+                c_a_neg_id_norm *= min(self.combine_weight_a.multp, 1.0)
+                s_a_neg_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
+                c_b_neg_id_norm *= min(self.combine_weight_a.multp, 1.0)
+                s_b_neg_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
 
             c_all = torch.Tensor().cuda().type(c_a_id_norm.dtype)
             s_all = torch.Tensor().cuda().type(s_a_id_norm.dtype)
@@ -863,7 +920,7 @@ class HICMDPP(nn.Module):
             f_all = torch.cat((f_all, c_all), dim=1)
             f_all = torch.cat((f_all, s_all), dim=1)
 
-            output_all, _, f_all_triplet = self.id_classifier(f_all)
+            output_all, _, f_all_triplet = self.id_classifier_a(f_all)
 
             pivot_idx_ce = find_array(idx_all, pivot_idx_ce)
             pivot_idx_trip1 = find_array(idx_all, pivot_idx_trip1)
@@ -949,7 +1006,7 @@ class HICMDPP(nn.Module):
         if Do_gen_update and Do_id_update:
             self.loss_total = self.loss_gen_total + self.loss_id_total
             self.loss_total.backward()
-            self.gen_optimizer.step()
+            self.gen_optimizer_a.step()
             self.zero_grad_G = True
             self.id_optimizer.step()
             self.zero_grad_ID = True
@@ -957,7 +1014,7 @@ class HICMDPP(nn.Module):
         elif Do_gen_update:
 
             self.loss_gen_total.backward()
-            self.gen_optimizer.step()
+            self.gen_optimizer_a.step()
             self.zero_grad_G = True
             try:
                 self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.old_loss_type['TOT_ID']  + self.loss_type['TOT_D']
@@ -965,7 +1022,7 @@ class HICMDPP(nn.Module):
                 self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
         elif Do_id_update:
             self.loss_id_total.backward()
-            self.gen_optimizer.step()
+            self.gen_optimizer_a.step()
             self.zero_grad_G = True
             self.id_optimizer.step()
             self.zero_grad_ID = True
@@ -981,26 +1038,734 @@ class HICMDPP(nn.Module):
 
 
         if self.case_a == 'RGB':
-            self.dis_RGB = self.dis_a   # 将优化后的网络模型 传回 HICMD实例对象中
-            self.gen_RGB = self.gen_a
+            self.dis_RGB_a = self.dis_a   # 将优化后的网络模型 传回 HICMD实例对象中
+            self.gen_RGB_a = self.gen_a
         elif self.case_a == 'IR':
-            self.dis_IR = self.dis_a
-            self.gen_IR = self.gen_a
+            self.dis_IR_a = self.dis_a
+            self.gen_IR_a = self.gen_a
         else:
             assert(False)
 
 
         if self.case_b == 'RGB':
-            self.dis_RGB = self.dis_b  # 将优化后的网络模型 传回 HICMD实例对象中
-            self.gen_RGB = self.gen_b
+            self.dis_RGB_a = self.dis_b  # 将优化后的网络模型 传回 HICMD实例对象中
+            self.gen_RGB_a = self.gen_b
         elif self.case_b == 'IR':
-            self.dis_IR = self.dis_b
-            self.gen_IR = self.gen_b
+            self.dis_IR_a = self.dis_b
+            self.gen_IR_a = self.gen_b
+        else:
+            assert(False)
+
+
+    ########################################################################
+    # 利用源域图像对源域的模型进行训练。
+    def dis_update_bb(self, x_a, x_b, opt, phase):
+
+        # Update discriminator
+        if self.case_a == 'RGB':
+            self.dis_a = self.dis_RGB_b  # 对RGB的鉴别器进行赋值
+            self.gen_a = self.gen_RGB_b  # 对RGB的生成器进行赋值。
+        elif self.case_a == 'IR':
+            self.dis_a = self.dis_IR_b   # 对IR的鉴别器进行赋值。 IR和RGB的模型均不相同。
+            self.gen_a = self.gen_IR_b   # 对IR的鉴别器进行赋值。 
+        else:
+            assert(False)
+
+        if self.case_b == 'RGB':
+            self.dis_b = self.dis_RGB_b  
+            self.gen_b = self.gen_RGB_b
+        elif self.case_b == 'IR':
+            self.dis_b = self.dis_IR_b
+            self.gen_b = self.gen_IR_b
+        else:
+            assert(False)
+
+        if self.cnt_cumul > 1:
+            # 对于第2次batch开始。
+            if self.cnt_cumul < opt.cnt_warmI2I: # only I2I
+                Do_dis_update = True
+            elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID
+                Do_dis_update = False
+            else:
+                Do_dis_update = True  # 执行这一句．
+        else:
+            Do_dis_update = True  # 第一次batch训练。
+
+        if Do_dis_update:
+            # 始终是要执行这一部分。
+            if self.zero_grad_D:                  
+                self.dom_dis_opt.zero_grad()      # 将模型参数梯度置零。         
+                self.dis_optimizer.zero_grad()    # 将图像鉴别器参数梯度置零。
+                self.zero_grad_D = False
+            # 值得注意的是，下属代码段执行后不会计算梯度。
+            with torch.no_grad():
+                # 这一步类似于try catch
+                if opt.D_input_dim == 1:
+                    Gx_a = self.single(x_a.clone())
+                    Gx_b = self.single(x_b.clone())
+                else:
+                    Gx_a = x_a.clone()
+                    Gx_b = x_b.clone()
+
+                Gx_a_raw = Gx_a.clone()
+                Gx_b_raw = Gx_b.clone()
+
+                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
+                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
+
+                s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a
+                s_b = self.gen_b.enc_att(Gx_b)  # 得到属性编码  s_b
+
+                s_a2 = s_a.clone()   # 对属性编码s_a 进行复制。
+                s_b2 = s_b.clone()   # 对属性编码s_b 进行复制。
+                s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)  # 对属性编码中的ID无关编码进行交换。 得到交换后的属性编码。
+                # 注意！！！交换属性编码后，s_a,s_b 对应的编码位置进行了互换！！！
+                # 含义是，在后续图像生成中，交换了姿势和光照编码
+                x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)   # 根据原型编码 c_b  和 属性编码  s_a   生成x_ba。 
+                x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)   # 根据原型编码 c_a  和 属性编码  s_b   生成x_ab。
+
+            # 计算损失函数。
+            #x_ba.detach() 表示从当前计算图中分离下来的，但是仍指向原变量的存放位置,不同之处只是requires_grad为false，得到的这个Variable永远不需要计算其梯度，不具有grad。
+            self.loss_dis_a = self.dis_a.calc_dis_loss(x_ba.detach(), Gx_a_raw)  # fake, real image [b x 1 x 64 x 32] matrix LSGAN
+            self.loss_dis_b = self.dis_b.calc_dis_loss(x_ab.detach(), Gx_b_raw)
+            self.loss_dis_total = (opt.w_gan * self.loss_dis_a + opt.w_gan * self.loss_dis_b)
+            # 计算跨域损失函数 L_{cross}^{Recon1}
+
+            s_a3_add = s_a2.clone()   # 对原始的  没有进行交换的 属性编码 进行复制。
+            s_b3_add = s_b2.clone()   # 对原始的  没有进行交换的 属性编码 进行复制。
+
+            # pose change
+            tmp = self.att_style_idx.copy()
+            tmp.extend(self.att_pose_idx)
+            s_a3_add, s_b3_add = change_two_index(s_a3_add, s_b3_add, tmp, self.att_illum_idx) # modality remain
+            # 这里的含义是，生成图像的时候，改变了姿势，但是光照不改变。即是说生成了同一个域的图像。
+            x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim) # (ID, pose) b, (modality) a
+            x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim) # (ID, pose) a, (modality) b
+
+            self.loss_dis_a3 = self.dis_a.calc_dis_loss(x_ba3.detach(), Gx_a_raw)   # 计算鉴别器的损失。
+            self.loss_dis_b3 = self.dis_b.calc_dis_loss(x_ab3.detach(), Gx_b_raw)
+            self.loss_dis_total += opt.w_gan * (self.loss_dis_a3 + self.loss_dis_b3)   # 记录对抗生成损失。
+
+            # 域鉴别器损失函数计算。--------------------------------------------------------
+            c_a_id, _ = self.backbone_pro_b(c_a, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
+            c_b_id, _ = self.backbone_pro_b(c_b, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
+
+            # Extract the style attribute codes.
+            s_a_id = torch_gather(s_a2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
+            s_b_id = torch_gather(s_b2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
+
+            # Nomilize the protetype and style attribute code.
+            c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))  # 将原型编码进行单位化。
+            s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))  # 将风格属性编码进行单位化。
+            c_b_id_norm = c_b_id.div(torch.norm(c_b_id, p=2, dim=1, keepdim=True).expand_as(c_b_id))  # 将原型编码进行单位化。
+            s_b_id_norm = s_b_id.div(torch.norm(s_b_id, p=2, dim=1, keepdim=True).expand_as(s_b_id))  # 将风格属性编码进行单位化。
+
+            # Combine the style attribute codes and the protetype codes.
+            c_a_id_norm *= min(self.combine_weight_b.multp, 1.0)
+            s_a_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+            f0_a = torch.Tensor().cuda()
+            f0_a = torch.cat((f0_a, c_a_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+            f0_a = torch.cat((f0_a, s_a_id_norm), dim=1)
+            _, f1_a, _ = self.id_classifier_b(f0_a)
+
+            c_b_id_norm *= min(self.combine_weight_b.multp, 1.0)
+            s_b_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+            f0_b = torch.Tensor().cuda()
+            f0_b = torch.cat((f0_b, c_b_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+            f0_b = torch.cat((f0_b, s_b_id_norm), dim=1)
+            _, f1_b, _ = self.id_classifier_b(f0_b)
+
+            #Calculate the domain discrimintor loss.
+            self.loss_id_dis_ab, _, _ = self.dom_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
+            # 缺少参数。
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab
+            
+            
+            #----------------------------------------------------------------------------------------------
+            # Update the parameters
+            self.loss_id_dis_total.backward()    # domain discriminator loss backward.
+            self.dom_dis_opt.step()   # optimize the domain discriminator.
+            
+            self.loss_dis_total.backward(retain_graph=False) #*****GPU memory --> 40Mb / ?/ -60Mb
+            # 根据损失函数，进行反向回传。计算discriminator中参数对应于对抗损失函数的梯度。
+            self.dis_optimizer.step() #*****GPU memory --> 100Mb / 0
+            # 根据梯度，对鉴别器参数进行优化。
+            self.zero_grad_D = True
+
+            # 损失函数的记录是否需要
+            self.loss_type['D_a']       = opt.w_gan * self.loss_dis_a.item()  # 存储IR/RGB鉴别器损失函数。
+            self.loss_type['D_b']       = opt.w_gan * self.loss_dis_b.item()  # 存储RGB/IR鉴别器损失函数。
+            self.loss_type['TOT_D']     = self.loss_dis_total.item()          # 存储图像鉴别器总的损失函数。
+            self.loss_type['D_domain']  = self.loss_id_dis_total.item()       # 存储域鉴别器损失函数，源域和目标域共享参数。
+
+        else:
+            try:
+                self.loss_type['D_a']      = self.old_loss_type['D_a']
+                self.loss_type['D_b']      = self.old_loss_type['D_b']
+                self.loss_type['TOT_D']    = self.old_loss_type['TOT_D']
+                self.loss_type['D_domain'] = self.old_loss_type['D_domain']
+            except:
+                self.loss_type['D_a']      = 0
+                self.loss_type['D_b']      = 0
+                self.loss_type['TOT_D']    = 0
+                self.loss_type['D_domain'] = 0
+
+        if self.case_a == 'RGB':
+            self.dis_RGB_b = self.dis_a  # 将优化更新后的鉴别器传回 原来的HICMD对象中。
+            self.gen_RGB_b = self.gen_a
+        elif self.case_a == 'IR':
+            self.dis_IR_b = self.dis_a
+            self.gen_IR_b = self.gen_a
+        else:
+            assert(False)
+
+        if self.case_b == 'RGB':
+            self.dis_RGB_b = self.dis_b
+            self.gen_RGB_b = self.gen_b
+        elif self.case_b == 'IR':
+            self.dis_IR_b = self.dis_b
+            self.gen_IR_b = self.gen_b
+        else:
+            assert(False)
+
+
+    def gen_update_bb(self, x_a, x_b, neg_a, neg_b, opt, phase):
+
+        # 这个函数是go_train中主要调用的函数。   这里的x_a，x_b都是两张图。
+        if self.case_a == 'RGB':
+            self.dis_a = self.dis_RGB_b     # RGB图像的鉴别器。
+            self.gen_a = self.gen_RGB_b     # RGB图像的图像生成器。
+        elif self.case_a == 'IR':
+            self.dis_a = self.dis_IR_b      # IR图像的鉴别器。
+            self.gen_a = self.gen_IR_b 
+        else:
+            assert(False)
+
+
+        if self.case_b == 'RGB':
+            self.dis_b = self.dis_RGB_b
+            self.gen_b = self.gen_RGB_b
+        elif self.case_b == 'IR':
+            self.dis_b = self.dis_IR_b
+            self.gen_b = self.gen_IR_b
+        else:
+            assert(False)
+
+        if self.cnt_cumul > 1:
+            if self.cnt_cumul < opt.cnt_warmI2I: # only I2I
+                Do_gen_update = True
+                Do_id_update = False
+            elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID
+                Do_gen_update = False
+                Do_id_update = True
+            else:
+                Do_gen_update = True
+                Do_id_update = True
+        else:
+            Do_gen_update = True
+            Do_id_update = True
+
+
+        ##########################################################################
+        # ID-PIG (ID-preserving Person Image Generation)
+        ##########################################################################
+        if Do_gen_update or Do_id_update:
+            if opt.G_input_dim == 1:
+                Gx_a = self.single(x_a.clone())
+                Gx_b = self.single(x_b.clone())
+            else:
+                Gx_a = x_a  #这里的图像都是两张。
+                Gx_b = x_b
+
+            Gx_a_raw = Gx_a.clone()    # 对输入图像进行复制
+            Gx_b_raw = Gx_b.clone()    # 对输入图像进行复制。
+
+            if self.zero_grad_G:
+                self.gen_optimizer_b.zero_grad()
+                self.zero_grad_G = False
+
+            c_a = self.gen_a.enc_pro(Gx_a)     # 利用原型编码器 进行编码 生成原型编码c_a。  2 * 256 * 64 * 32
+            c_b = self.gen_b.enc_pro(Gx_b)     # 利用原型编码器 进行编码 生成原型编码c_b。
+            s_a = self.gen_a.enc_att(Gx_a)     # 利用属性编码器 进行编码 生成属性编码s_a。
+            s_b = self.gen_b.enc_att(Gx_b)     # 生成属性编码s_b
+            s_a_id = s_a.clone()     # 对属性编码 s_a 进行复制。
+            s_b_id = s_b.clone()     # 对属性编码 s_b 进行复制。
+
+            s_a2 = s_a.clone()    # 
+            s_b2 = s_b.clone()
+            s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)   # 交换两个属性编码形成 新的属性编码. style-idx：0-255,  512-767, 1024-1279, 1536-1791
+            # att_ex_idx:   256-511, 768-1023, 1280-1535, 1792-2047
+            # 进行属性编码的交换。 
+            x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)        # 生成图像Xb->a，这里是两张一起生成。
+            x_a_recon = self.gen_a.dec(c_a, s_a, self.gen_a.enc_pro.output_dim)   # 生成图像Xa->a 。
+
+            x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)        # 生成图像Xa->b。
+            x_b_recon = self.gen_b.dec(c_b, s_b, self.gen_b.enc_pro.output_dim)   # 生成图像Xb->b。
+
+            x_ba_raw = x_ba.clone()
+            x_ab_raw = x_ab.clone()
+
+            if Do_gen_update:
+                c_b_recon = self.gen_a.enc_pro(x_ba)     # 对Xba提取  原型编码, 得到原型编码 c_b_recon
+                c_a_recon = self.gen_b.enc_pro(x_ab)     # 对Xab提取  原型编码, 得到原型编码 c_a_recon
+                s_a_recon = self.gen_a.enc_att(x_ba)     # 对Xba提取  属性编码, 得到属性源码 s_a_recon
+                s_b_recon = self.gen_b.enc_att(x_ab)     # 对Xab提取  属性编码, 得到属性源码 s_b_recon.
+                s_a_recon_id = s_a_recon.clone()
+                s_b_recon_id = s_b_recon.clone()
+
+                if opt.w_cycle_x > 0:
+                    x_aba = self.gen_a.dec(c_a_recon, s_a, self.gen_a.enc_pro.output_dim)    # 生成图像Xaba。
+                    x_bab = self.gen_b.dec(c_b_recon, s_b, self.gen_b.enc_pro.output_dim)    # 生成图像Xbab。
+
+                # reconstruction loss (same)
+                self.loss_gen_recon_x_a = self.recon_criterion(x_a_recon, Gx_a_raw)
+                self.loss_gen_recon_x_b = self.recon_criterion(x_b_recon, Gx_b_raw)
+                self.loss_gen_recon_x = opt.w_recon_x * (self.loss_gen_recon_x_a + self.loss_gen_recon_x_b)
+                self.loss_type['G_rec_x'] = self.loss_gen_recon_x.item() if self.loss_gen_recon_x != 0 else 0
+                # 这里应该分开存储，因为源域目标域的 模型不同。
+                # reconstruction loss (cross)
+                self.loss_gen_cross_x_ab = self.recon_criterion(x_ab_raw, Gx_b_raw)
+                self.loss_gen_cross_x_ba = self.recon_criterion(x_ba_raw, Gx_a_raw)
+                self.loss_gen_cross_x = opt.w_cross_x * (self.loss_gen_cross_x_ab + self.loss_gen_cross_x_ba)
+                self.loss_type['G_cross_x'] = self.loss_gen_cross_x.item() if self.loss_gen_cross_x != 0 else 0
+
+                # reconstruction loss (cycle)
+                if opt.w_cycle_x > 0:
+                    self.loss_gen_cyc_x_a = self.recon_criterion(x_aba, Gx_a_raw)
+                    self.loss_gen_cyc_x_b = self.recon_criterion(x_bab, Gx_b_raw)
+                else:
+                    self.loss_gen_cyc_x_a = 0
+                    self.loss_gen_cyc_x_b = 0
+                self.loss_gen_cyc_x = opt.w_cycle_x * (self.loss_gen_cyc_x_a + self.loss_gen_cyc_x_b)
+                self.loss_type['G_cyc_x'] = self.loss_gen_cyc_x.item() if self.loss_gen_cyc_x != 0 else 0
+
+                # attribute code reconstruction loss    下面提取相应的属性和原型编码到对应的向量中。
+                att_style_s_a       = torch_gather(s_a_id, self.att_style_idx, 1)                                  # 2个 1024 维度的风格属性编码，ID相关。
+                att_ex_s_a          = torch_gather(s_a_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None   # 2个1024维度的ID无关属性编码。
+                att_style_s_b       = torch_gather(s_b_id, self.att_style_idx, 1)
+                att_ex_s_b          = torch_gather(s_b_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None
+                att_style_s_a_recon = torch_gather(s_a_recon_id, self.att_style_idx, 1)
+                att_ex_s_a_recon    = torch_gather(s_a_recon_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None
+                att_style_s_b_recon = torch_gather(s_b_recon_id, self.att_style_idx, 1)
+                att_ex_s_b_recon    = torch_gather(s_b_recon_id, self.att_ex_idx, 1) if self.att_illum_dim != 0 else None
+
+                self.loss_gen_recon_s = self.recon_criterion(att_ex_s_a, att_ex_s_a_recon)  # 计算L code recon
+                self.loss_gen_recon_s += self.recon_criterion(att_ex_s_b, att_ex_s_b_recon)
+                self.etc_type['S_remain'] = self.loss_gen_recon_s.item()
+
+                self.loss_gen_recon_s2 = self.recon_criterion(att_style_s_b, att_style_s_a_recon)
+                self.loss_gen_recon_s2 += self.recon_criterion(att_style_s_a, att_style_s_b_recon)
+                self.etc_type['S_ID'] = self.loss_gen_recon_s2.item()
+                self.loss_gen_recon_s += self.loss_gen_recon_s2
+                self.loss_gen_recon_s *= opt.w_recon_s
+                self.loss_type['G_rec_s'] = self.loss_gen_recon_s.item() if self.loss_gen_recon_s != 0 else 0
+
+                # KLD loss (attribute code to gaussian distribution)
+                self.loss_gen_s_a_kl = self.compute_kl(
+                    torch_gather(s_a, self.att_ex_idx, 1)) if opt.w_style_kl != 0 else 0
+                self.loss_gen_s_b_kl = self.compute_kl(
+                    torch_gather(s_b, self.att_ex_idx, 1)) if opt.w_style_kl != 0 else 0
+                self.loss_gen_kl = opt.w_style_kl * (self.loss_gen_s_a_kl + self.loss_gen_s_b_kl)
+                self.loss_type['style_kl'] = self.loss_gen_kl.item() if self.loss_gen_kl != 0 else 0
+
+                # GAN loss
+                self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba_raw)
+                self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab_raw)
+                self.loss_gen_adv = opt.w_gan * (self.loss_gen_adv_a + self.loss_gen_adv_b)
+                self.loss_type['G_adv'] = self.loss_gen_adv.item() if self.loss_gen_adv != 0 else 0
+                s_a3_add = s_a2.clone()
+                s_b3_add = s_b2.clone()
+
+                tmp = self.att_style_idx.copy()
+                tmp.extend(self.att_pose_idx)
+                s_a3_add, s_b3_add = change_two_index(s_a3_add, s_b3_add, tmp, self.att_illum_idx)  # only modality change
+
+                x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim)  # (ID, pose) b, (modality) a
+                x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim)  # (ID, pose) a, (modality) b
+                self.loss_gen_adv_a3 = self.dis_a.calc_gen_loss(x_ba3)
+                self.loss_gen_adv_b3 = self.dis_b.calc_gen_loss(x_ab3)
+                self.loss_gen_adv += opt.w_gan * (self.loss_gen_adv_a3 + self.loss_gen_adv_b3)
+
+                # total ID-PIG loss   计算IDPIG部分总的损失函数值，这个值是一个标量，一个数。
+                self.loss_gen_total = self.loss_gen_recon_x + self.loss_gen_cyc_x + self.loss_gen_adv + \
+                                      self.loss_gen_recon_s + self.loss_gen_kl + self.loss_gen_cross_x
+
+                if opt.HFL_ratio > 0:
+                    self.loss_gen_total *= (1.0 - opt.HFL_ratio)
+
+                self.loss_type['TOT_G'] = self.loss_gen_total.item()
+
+            else:
+                try:
+                    self.loss_type['G_adv'] = self.old_loss_type['G_adv']
+                    self.loss_type['G_rec_x'] = self.old_loss_type['G_rec_x']
+                    self.loss_type['G_cyc_x'] = self.old_loss_type['G_cyc_x']
+                    self.loss_type['G_rec_s'] = self.old_loss_type['G_rec_s']
+                    self.loss_type['G_style_kl'] = self.old_loss_type['G_style_kl']
+                    self.loss_type['G_cross_x'] = self.old_loss_type['G_cross_x']
+                    self.loss_type['TOT_G'] = self.old_loss_type['TOT_G']
+                except:
+                    self.loss_type['G_adv'] = 0
+                    self.loss_type['G_rec_x'] = 0
+                    self.loss_type['G_cyc_x'] = 0
+                    self.loss_type['G_rec_s'] = 0
+                    self.loss_type['G_style_kl'] = 0
+                    self.loss_type['G_cross_x'] = 0
+                    self.loss_type['TOT_G'] = 0
+
+        ##########################################################################
+        # HFL (Hierarchical Feature Learning)
+        ##########################################################################
+
+        if Do_id_update:
+
+            if self.zero_grad_ID:
+                self.id_optimizer.zero_grad()  ##################### Add
+                self.zero_grad_ID = False
+
+            # Compute prototype and attribute codes (for alternate sampling)
+            x_a_re_id = self.to_re(Gx_a_raw.clone())  # 将输入图像进行随机的擦除部分区域。
+            x_b_re_id = self.to_re(Gx_b_raw.clone())  #
+            x_a_re_id = x_a_re_id.detach()  # 从梯度计算中剥离。
+            x_b_re_id = x_b_re_id.detach()
+
+            c_a_id = self.gen_a.enc_pro(x_a_re_id)  # 计算原型编码。
+            c_b_id = self.gen_b.enc_pro(x_b_re_id)  # 计算原型编码，得到c_b_id
+            s_a_id = self.gen_a.enc_att(x_a_re_id)  # 计算属性编码
+            s_b_id = self.gen_b.enc_att(x_b_re_id)  # 计算属性编码。
+
+            x_ab_re_id = self.to_re(x_ab_raw.clone())   # 将Xab进行随机擦除。
+            x_ba_re_id = self.to_re(x_ba_raw.clone())
+            x_ab_re_id = x_ab_re_id.detach()
+            x_ba_re_id = x_ba_re_id.detach()
+
+            c_a_recon_id = self.gen_b.enc_pro(x_ab_re_id)   # 计算随机擦除后的XAB的 原型编码
+            c_b_recon_id = self.gen_a.enc_pro(x_ba_re_id)   # 计算。。
+            s_a_recon_id = self.gen_a.enc_att(x_ba_re_id)
+            s_b_recon_id = self.gen_b.enc_att(x_ab_re_id)
+
+            c_a_id = self.backbone_pro_b(c_a_id)  # 将2*256*64*32维度的原型编码张量，变成了 2*1024维度的向量。
+            s_a_id_raw = s_a_id.clone()
+            s_a_id = torch_gather(s_a_id, self.att_style_idx, 1)   # 从2048维度的向量中提取1024维度的 风格 属性编码
+
+            c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))
+            s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))
+
+            self.etc_type['combine_w'] = self.combine_weight_b.multp.item()
+            c_a_id_norm *= min(self.combine_weight_b.multp, 1.0)
+            s_a_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+
+            c_b_id = self.backbone_pro_b(c_b_id)
+            s_b_id = torch_gather(s_b_id, self.att_style_idx, 1)
+
+            c_b_id_norm = c_b_id.div(torch.norm(c_b_id, p=2, dim=1, keepdim=True).expand_as(c_b_id))
+            s_b_id_norm = s_b_id.div(torch.norm(s_b_id, p=2, dim=1, keepdim=True).expand_as(s_b_id))
+
+            c_b_id_norm *= min(self.combine_weight_b.multp, 1.0)
+            s_b_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+
+            c_a_recon_id = self.backbone_pro_a(c_a_recon_id)
+            s_a_recon_id = torch_gather(s_a_recon_id, self.att_style_idx, 1)
+
+            c_a_recon_id_norm = c_a_recon_id.div(torch.norm(c_a_recon_id, p=2, dim=1, keepdim=True).expand_as(c_a_recon_id))
+            s_a_recon_id_norm = s_a_recon_id.div(torch.norm(s_a_recon_id, p=2, dim=1, keepdim=True).expand_as(s_a_recon_id))
+
+            c_a_recon_id_norm *= min(self.combine_weight_b.multp, 1.0)
+            s_a_recon_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+
+            c_b_recon_id = self.backbone_pro_a(c_b_recon_id)
+            s_b_recon_id = torch_gather(s_b_recon_id, self.att_style_idx, 1)
+
+            c_b_recon_id_norm = c_b_recon_id.div(torch.norm(c_b_recon_id, p=2, dim=1, keepdim=True).expand_as(c_b_recon_id))
+            s_b_recon_id_norm = s_b_recon_id.div(torch.norm(s_b_recon_id, p=2, dim=1, keepdim=True).expand_as(s_b_recon_id))
+
+            c_b_recon_id_norm *= min(self.combine_weight_b.multp, 1.0)
+            s_b_recon_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+
+
+            if self.is_neg:
+
+                if opt.G_input_dim == 1:
+                    Gy_a = self.single(neg_a.clone())
+                    Gy_b = self.single(neg_b.clone())
+                else:
+                    Gy_a = neg_a.clone()
+                    Gy_b = neg_b.clone()
+
+                y_a_re_id = self.to_re(Gy_a.clone())
+                y_b_re_id = self.to_re(Gy_b.clone())
+
+                y_a_re_id = y_a_re_id.detach()
+                y_b_re_id = y_b_re_id.detach()
+
+                c_a_neg_id = self.gen_a.enc_pro(y_a_re_id)
+                c_b_neg_id = self.gen_b.enc_pro(y_b_re_id)
+                s_a_neg_id = self.gen_a.enc_att(y_a_re_id)
+                s_b_neg_id = self.gen_b.enc_att(y_b_re_id)
+
+                c_a_neg_id = self.backbone_pro_b(c_a_neg_id)
+                c_b_neg_id = self.backbone_pro_b(c_b_neg_id)
+
+                s_a_neg_id = torch_gather(s_a_neg_id, self.att_style_idx, 1)
+                s_b_neg_id = torch_gather(s_b_neg_id, self.att_style_idx, 1)
+
+                c_a_neg_id_norm = c_a_neg_id.div(torch.norm(c_a_neg_id, p=2, dim=1, keepdim=True).expand_as(c_a_neg_id))
+                s_a_neg_id_norm = s_a_neg_id.div(torch.norm(s_a_neg_id, p=2, dim=1, keepdim=True).expand_as(s_a_neg_id))
+                c_b_neg_id_norm = c_b_neg_id.div(torch.norm(c_b_neg_id, p=2, dim=1, keepdim=True).expand_as(c_b_neg_id))
+                s_b_neg_id_norm = s_b_neg_id.div(torch.norm(s_b_neg_id, p=2, dim=1, keepdim=True).expand_as(s_b_neg_id))
+
+                self.etc_type['combine_w'] = self.combine_weight_b.multp.item()
+                c_a_neg_id_norm *= min(self.combine_weight_b.multp, 1.0)
+                s_a_neg_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+                c_b_neg_id_norm *= min(self.combine_weight_b.multp, 1.0)
+                s_b_neg_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+
+            c_all = torch.Tensor().cuda().type(c_a_id_norm.dtype)
+            s_all = torch.Tensor().cuda().type(s_a_id_norm.dtype)
+            label_all = torch.Tensor().cuda().type(self.labels_a.dtype)
+            idx_all = []
+
+            pivot_idx_ce = [1, 2, 3, 4, 5, 6, 7, 8]  # base 1,2,3,4 [5,6] 7,8,9,10
+            pivot_idx_trip1 = [1, 3, 7]
+            pivot_idx_trip2 = [2, 4, 8]
+            target_idx_trip1 = [1, 2, 3, 4, 5, 6, 7, 8]
+            target_idx_trip2 = [1, 2, 3, 4, 5, 6, 7, 8]
+
+            samp_idx = pivot_idx_ce.copy()
+            samp_idx.extend(pivot_idx_trip1.copy())
+            samp_idx.extend(pivot_idx_trip2.copy())
+            samp_idx.extend(target_idx_trip1.copy())
+            samp_idx.extend(target_idx_trip2.copy())
+            samp_idx = list(set(samp_idx))
+
+
+            if 1 in samp_idx: # pure a [a]
+                c_all = torch.cat((c_all, c_a_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_a_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_a), dim=0)
+                idx_all.extend([1]*len(self.labels_a))
+
+            if 2 in samp_idx: # pure b [b]
+                c_all = torch.cat((c_all, c_b_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_b_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_b), dim=0)
+                idx_all.extend([2]*len(self.labels_b))
+
+            if 3 in samp_idx: # x_ba (c_b_recon, s_a_recon) [b] a'
+                c_all = torch.cat((c_all, c_b_recon_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_a_recon_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_b), dim=0)
+                idx_all.extend([3]*len(self.labels_b))
+
+            if 4 in samp_idx:  # x_ab (c_a_recon, s_b_recon) [a] b'
+                c_all = torch.cat((c_all, c_a_recon_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_b_recon_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_a), dim=0)
+                idx_all.extend([4]*len(self.labels_a))
+
+            if self.is_neg:
+                if 5 in samp_idx: # neg a [neg_a]
+                    c_all = torch.cat((c_all, c_a_neg_id_norm), dim=0)  # original
+                    s_all = torch.cat((s_all, s_a_neg_id_norm), dim=0)
+                    label_all = torch.cat((label_all, self.labels_neg_a), dim=0)
+                    idx_all.extend([5]*len(self.labels_neg_a))
+
+                if 6 in samp_idx: # neg b [neg_b]
+                    c_all = torch.cat((c_all, c_b_neg_id_norm), dim=0)  # original
+                    s_all = torch.cat((s_all, s_b_neg_id_norm), dim=0)
+                    label_all = torch.cat((label_all, self.labels_neg_b), dim=0)
+                    idx_all.extend([6]*len(self.labels_neg_b))
+
+            if 7 in samp_idx: # a_uni_comb (a - ba) [a-b] a''
+                c_all = torch.cat((c_all, c_a_id_norm, c_b_recon_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_a_recon_id_norm, s_a_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_a, self.labels_b), dim=0)
+                idx_all.extend([7]*len(self.labels_a)*2)
+
+            if 8 in samp_idx: # b_uni_comb (b - ab) [b-a] b''
+                c_all = torch.cat((c_all, c_b_id_norm, c_a_recon_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_b_recon_id_norm, s_b_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_b, self.labels_a), dim=0)
+                idx_all.extend([8]*len(self.labels_a)*2)
+
+            if 9 in samp_idx: # b_cross_comb (b - a+ba) [b-a] a'''
+                c_all = torch.cat((c_all, c_b_id_norm, c_b_id_norm, c_a_recon_id_norm, c_a_recon_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_a_id_norm, s_a_recon_id_norm, s_a_id_norm, s_a_recon_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_b, self.labels_b, self.labels_a, self.labels_a), dim=0)
+                idx_all.extend([9]*len(self.labels_a)*4)
+
+            if 10 in samp_idx: # a_cross_comb (a - b+ab) [b-a] b'''
+                c_all = torch.cat((c_all, c_a_id_norm, c_a_id_norm, c_b_recon_id_norm, c_b_recon_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_b_id_norm, s_b_recon_id_norm, s_b_id_norm, s_b_recon_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_a, self.labels_a, self.labels_b, self.labels_b), dim=0)
+                idx_all.extend([10]*len(self.labels_a)*4)
+
+            if 11 in samp_idx:
+                c_all = torch.cat((c_all, c_a_id_norm, c_b_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_a_id_norm, s_b_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_a, self.labels_a), dim=0)
+                idx_all.extend([11] * (len(self.labels_a) * 2))
+
+                if self.is_neg:
+                    c_all = torch.cat((c_all, c_a_neg_id_norm, c_b_neg_id_norm), dim=0)  # original
+                    s_all = torch.cat((s_all, s_a_neg_id_norm, s_b_neg_id_norm), dim=0)
+                    label_all = torch.cat((label_all, self.labels_neg_a, self.labels_neg_b), dim=0)
+                    idx_all.extend([11] * (len(self.labels_neg_a) * 2))
+            if 12 in samp_idx:
+                c_all = torch.cat((c_all, c_a_id_norm, c_b_id_norm, c_a_recon_id_norm, c_b_recon_id_norm, c_b_recon_id_norm, c_a_recon_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_a_recon_id_norm, s_b_recon_id_norm, s_b_id_norm, s_a_id_norm, s_a_recon_id_norm, s_b_recon_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_a, self.labels_b, self.labels_a, self.labels_b, self.labels_b, self.labels_a), dim=0)
+                idx_all.extend([12] * len(self.labels_a) * 6)
+            if 13 in samp_idx:
+                c_all = torch.cat((c_all, c_a_id_norm, c_b_id_norm, c_a_id_norm, c_b_id_norm, c_a_recon_id_norm, c_b_recon_id_norm, c_a_recon_id_norm, c_b_recon_id_norm), dim=0)  # original
+                s_all = torch.cat((s_all, s_b_id_norm, s_a_id_norm, s_b_recon_id_norm, s_a_recon_id_norm, s_a_id_norm, s_b_id_norm, s_a_recon_id_norm, s_b_recon_id_norm), dim=0)
+                label_all = torch.cat((label_all, self.labels_a, self.labels_b, self.labels_a, self.labels_b, self.labels_a, self.labels_b, self.labels_a, self.labels_b), dim=0)
+                idx_all.extend([13] * len(self.labels_a) * 8)
+
+            f_all = torch.Tensor().cuda()
+            f_all = torch.cat((f_all, c_all), dim=1)
+            f_all = torch.cat((f_all, s_all), dim=1)
+
+            # 使用分类器 对 得到的特征向量进行分类。   得到分组标签。
+            output_all, _, f_all_triplet = self.id_classifier_b(f_all) 
+
+            pivot_idx_ce = find_array(idx_all, pivot_idx_ce)
+            pivot_idx_trip1 = find_array(idx_all, pivot_idx_trip1)
+            target_idx_trip1 = find_array(idx_all, target_idx_trip1)
+            pivot_idx_trip2 = find_array(idx_all, pivot_idx_trip2)
+            target_idx_trip2 = find_array(idx_all, target_idx_trip2)
+
+            output_all_ce = output_all[pivot_idx_ce].clone()
+            label_all_ce = label_all[pivot_idx_ce].clone()
+            f_all_triplet1 = f_all_triplet[pivot_idx_trip1].clone()
+            label_triplet1 = label_all[pivot_idx_trip1].clone()
+            f_all_triplet1_target = f_all_triplet[target_idx_trip1].clone()
+            label_triplet1_target = label_all[target_idx_trip1].clone()
+            f_all_triplet2 = f_all_triplet[pivot_idx_trip2].clone()
+            label_triplet2 = label_all[pivot_idx_trip2].clone()
+            f_all_triplet2_target = f_all_triplet[target_idx_trip2].clone()
+            label_triplet2_target = label_all[target_idx_trip2].clone()
+
+            # CE loss
+            num_part = 1
+            loss_all, acc_all, loss_cnt = self.apply_CE_loss_between_two_labels(opt, output_all_ce, label_all_ce,
+                                                                                num_part, 0.0, 0.0, 0.0)
+            self.loss_CE            = loss_all
+            self.acc_type['CE']     = acc_all / loss_cnt
+            self.loss_type['CE']    = self.loss_CE.item()
+
+            # Triplet loss
+            loss_flag = opt.ID_TRIP_loss_flag
+            w_trip_reg = opt.w_trip_reg
+            w_trip = opt.w_trip
+            triplet_margin = opt.triplet_margin
+
+            loss_all, acc_all, reg_all, margin_all, pscore_all, nscore_all, loss_cnt = \
+                self.apply_triplet_loss_between_features(opt, f_all_triplet1, f_all_triplet1_target, [], label_triplet1.cpu(), \
+                                                         label_triplet1_target.cpu(), [], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, \
+                                                         loss_flag, w_trip_reg, w_trip, triplet_margin)
+
+            loss_all, acc_all, reg_all, margin_all, pscore_all, nscore_all, loss_cnt = \
+                self.apply_triplet_loss_between_features(opt, f_all_triplet2, f_all_triplet2_target, [], label_triplet2.cpu(), \
+                                                         label_triplet2_target.cpu(), [], loss_all, acc_all, reg_all, margin_all, \
+                                                             pscore_all, nscore_all, loss_cnt, \
+                                                             loss_flag, w_trip_reg, w_trip, triplet_margin)
+
+            self.loss_trip = loss_all
+            self.acc_type['Trip'] = acc_all / loss_cnt
+            self.etc_type['Trip_reg'] = reg_all / loss_cnt
+            self.etc_type['Trip_margin'] = margin_all / loss_cnt
+            self.etc_type['Trip_pscore'] = pscore_all / loss_cnt
+            self.etc_type['Trip_nscore'] = nscore_all / loss_cnt
+            self.loss_type['TRIP'] = self.loss_trip.item() if self.loss_trip != 0 else 0
+
+            self.loss_id_total = self.loss_CE + self.loss_trip
+
+            if opt.HFL_ratio > 0:
+                self.loss_id_total *= opt.HFL_ratio
+
+            self.loss_type['TOT_ID'] = self.loss_id_total.item()
+
+        else:
+            try:
+                self.loss_type['TOT_ID'] = self.old_loss_type['TOT_ID']
+                self.loss_type['CE'] = self.loss_type['CE']
+                self.acc_type['CE'] = self.acc_type['CE']
+                self.loss_type['TRIP'] = self.loss_type['TRIP']
+                self.acc_type['Trip'] = self.acc_type['Trip']
+                self.etc_type['Trip_reg'] = self.etc_type['Trip_reg']
+                self.etc_type['Trip_margin'] = self.etc_type['Trip_margin']
+            except:
+                self.loss_type['TOT_ID'] = 0
+                self.loss_type['CE'] = 0
+                self.acc_type['CE'] = 0
+                self.loss_type['TRIP'] = 0
+                self.acc_type['Trip'] = 0
+                self.etc_type['Trip_reg'] = 0
+                self.etc_type['Trip_margin'] = 0
+
+        
+        
+        
+        # Update ID-PIG and HFL
+        # 这一步骤主要是对ID-PIG和HFL中的参数进行更新。
+
+        if Do_gen_update and Do_id_update:
+            self.loss_total = self.loss_gen_total + self.loss_id_total
+            self.loss_total.backward()
+            self.gen_optimizer_b.step()
+            self.zero_grad_G = True
+            self.id_optimizer.step()
+            self.zero_grad_ID = True
+            self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
+        elif Do_gen_update:
+
+            self.loss_gen_total.backward()
+            self.gen_optimizer_b.step()
+            self.zero_grad_G = True
+            try:
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.old_loss_type['TOT_ID']  + self.loss_type['TOT_D']
+            except:
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+        elif Do_id_update:
+            self.loss_id_total.backward()
+            self.gen_optimizer_b.step()
+            self.zero_grad_G = True
+            self.id_optimizer.step()
+            self.zero_grad_ID = True
+            try:
+                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+            except:
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+        else:
+            try:
+                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.old_loss_type['TOT_ID'] + self.old_loss_type['TOT_D']
+            except:
+                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
+
+
+        if self.case_a == 'RGB':
+            self.dis_RGB_b = self.dis_a   # 将优化后的网络模型 传回 HICMD实例对象中
+            self.gen_RGB_b = self.gen_a
+        elif self.case_a == 'IR':
+            self.dis_IR_b = self.dis_a
+            self.gen_IR_b = self.gen_a
+        else:
+            assert(False)
+
+
+        if self.case_b == 'RGB':
+            self.dis_RGB_b = self.dis_b  # 将优化后的网络模型 传回 HICMD实例对象中
+            self.gen_RGB_b = self.gen_b
+        elif self.case_b == 'IR':
+            self.dis_IR_b = self.dis_b
+            self.gen_IR_b = self.gen_b
         else:
             assert(False)
 
 
 
+    ###############
 
 
     def go_train(self, data, opt, phase, cnt, epoch):

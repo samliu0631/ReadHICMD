@@ -176,7 +176,9 @@ def opt_model(opt):
     opt.D_n_res = 4
     opt.D_type = 2 # make_net2()
 
-
+    # 5) Domain discriminator  added by sam.
+    opt.dom_dis_gan_w    = 1
+    opt.dom_dis_id_adv_w = 1.000 
 
     # ===== Test options =====
     opt.test_multi = False
