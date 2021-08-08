@@ -66,26 +66,31 @@ for round_idx in range(config['max_round']):
    if round_idx == config['adv_warm_max_round']:   # config['adv_warm_max_round'] =1 
       config['lr2'] *= config['lr2_ramp_factor']   # The factor to multiply the lr2 after switching to self-training
       config['id_adv_w'] = 0.0
-      config['id_adv_w_max'] = 0.0
-      config['id_tgt'] = True
+      config['id_adv_w_max'] = 0.0     # TODO: 搞清楚这些参数的作用，以及是否需要使用。
+      config['id_tgt'] = True          # TODO: 要考虑是否使用
       config['teacher'] = '' # we do not use teacher in the self-training
       if config['aa_drop']:
             config['aa'] = False
 
-   trainer = HICMDPP( opt, config )   
-   trainer.cuda()   
+     
    if round_idx == 0:           
-      # Load the pretrained HICMD model.       
-      trainer.cnt_cumul = trainer.resume0(opt)             
-   else:
-      trainer.cnt_cumul = trainer.resume1(checkpoint_directory_prev)  
-      
+      config['ID_class_b'] = 0          # make sure class of target domain is 0 in initial round.    
+      trainer = HICMDPP( opt, config )  # 
+      trainer.cuda()  
+      trainer.cnt_cumul = trainer.resume0(opt)   
+
 
    ### Pseudo-label generation ###
-   GeneratepPreKnownPseudoCode( config ) # 这里用真实标签作为伪标签，目的在于测试模型是否能改善在目标域的测试结果。
+   GeneratepPreKnownPseudoCode( config )  # 这里用真实标签作为伪标签，目的在于测试模型是否能改善在目标域的测试结果。
    
    # TODO: Finish the pseudo label generation.
    # trainer.S_generate_pseudo_label(opt, config )  
+
+   if round_idx > 0:           
+      # Load the pretrained HICMD model.     
+      trainer = HICMDPP( opt, config )   
+      trainer.cuda()  
+      trainer.cnt_cumul = trainer.resume1(checkpoint_directory_prev)  
 
 
    # 产生数据集加载器。
@@ -109,19 +114,32 @@ for round_idx in range(config['max_round']):
          if order_a < config['ID_class_a'] and order_b < config['ID_class_a']:
             print("aa")
             mode_code = "aa"
-            trainer.go_train_mix(data_a, opt, 'train_all' , cnt, epoch_ridx, mode_code)  
+            trainer.go_train_mix(data_a, opt, 'train_all' , cnt, epoch_ridx, mode_code,config)  
             epoch_cnt = trainer.cnt_cumul  
 
          elif order_a >= config['ID_class_a'] and order_b >= config['ID_class_a']:
             print('bb')
             mode_code = "bb"
-            trainer.go_train_mix(data_b, opt, 'train_all' , cnt, epoch_ridx, mode_code) 
+            trainer.go_train_mix(data_b, opt, 'train_all' , cnt, epoch_ridx, mode_code,config ) 
             epoch_cnt = trainer.cnt_cumul
          
          elif order_a < config['ID_class_a'] and order_b >= config['ID_class_a']:
             print("ab")
             mode_code ="ab"
-            # trainer.go_train_ab
+            # 如何处理数据。 把源域和目标域的数据进行重新组合。
+            # 源域序号。
+            SourceIndex    = [0,1,4,5]
+            TargetIndex    = [2,3,6,7]
+            SourceNegIndex = [0,1]
+            TargetNegIndex = [2,3]
+            inputs_a, pos_a, neg_a, attribute_a, attribute_pos_a, attribute_neg_a = data_a
+            inputs_b, pos_b, neg_b, attribute_b, attribute_pos_b, attribute_neg_b = data_b
+            pos = pos_a[SourceIndex]
+            pos = pos_b[TargetIndex]
+            # 改到这里。！！！！！！！！！！！！！！！！！！！！2021.8.8
+
+            
+            trainer.go_train_mix(data_b, opt, 'train_all' , cnt, epoch_ridx, mode_code,config ) 
             epoch_cnt = trainer.cnt_cumul
 
 

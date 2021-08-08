@@ -304,7 +304,7 @@ def GeneratepPreKnownPseudoCode( config ):
     for name in subfolder_list:
         copytree(src_train_all_path + '/' + name, save_path + '/B_' + name) 
     config['sample_b']   = len(file_list)         # 源域train_all文件夹下图像的总数量。
-    
+    config['ID_class_b'] = len(subfolder_list)  # 这里直接进行了赋值。在真实情况下，是通过分类算法产生的。
     # 将源域图像 拷贝到伪标签目录下。 
     copy_save_gt( config )
     return

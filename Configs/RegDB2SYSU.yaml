@@ -11,6 +11,9 @@ data_root_b:    /home/tianyu/code/SamWorkSpace/HiCMD-master/data/SYSU
 OuputModelDir:  /home/tianyu/code/SamWorkSpace/HiCMD-master/model/RegDB2SYSU    
 batch_size: 1
 epoch_round_adv: 22       # 产生一次伪标签后，数据集合训练的次数。
+ID_class_a: 206                  # The number of ID classes of source domain. Eg:RegDB:206
+ID_class_b: 0
+id_tgt: false
 
 gen:
   activ: lrelu                   # activation function style [relu/lrelu/prelu/selu/tanh]

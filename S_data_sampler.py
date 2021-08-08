@@ -419,9 +419,9 @@ class S_PosNegSampler( datasets.ImageFolder ):
         # pos = torch.cat((pos0.view(1,c,h,w), pos1.view(1,c,h,w), pos2.view(1,c,h,w), pos3.view(1,c,h,w)), 0)
         return ori, pos, neg, attribute, attribute_pos, attribute_neg
         # 这个就是dataloader一次加载的数据，且应为batch=1，所以这个返回结果就是
-        # ori:Index对应图像生成的tensor。  
+        # ori: Index对应图像生成的tensor。  
         # pos：8*3*256*128维的图像tensor。 
-        # neg:4*3*256*128的图像tensor。
+        # neg: 4*3*256*128的图像tensor。
         # attribute: index对应图像的标签信息。
         # attribute_pos: 8张正向示例图像的标签等信息
         # attribute_neg: 负向示例图像的标签等信息。

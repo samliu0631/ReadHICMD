@@ -166,12 +166,10 @@ class HICMDPP(nn.Module):
 
         # additional fc_layers (for CE, TRIP)
         self.combine_weight_a   = ft_weight()
-        # Note:这里需要注意，分类器的输出需要和  为标签的类别数量相符。 所以需要动态设置。
-        # 
-        #class_num = opt.nclasses
 
-
-        self.id_classifier_a    = ft_classifier(input_dim = id_dim, class_num = opt.nclasses, droprate = opt.droprate, fc1 = opt.fc1_channel, fc2 = opt.fc2_channel, \
+        # 分类的图像类型，要根据产生的伪标签动态设置。
+        classnum = config['ID_class_a'] + config['ID_class_b']
+        self.id_classifier_a    = ft_classifier(input_dim = id_dim, class_num = classnum, droprate = opt.droprate, fc1 = opt.fc1_channel, fc2 = opt.fc2_channel, \
                                          bnorm = opt.bnorm, ID_norm = opt.ID_norm, ID_act = opt.ID_act, w_lrelu = opt.w_lrelu, return_f = True)
         self.combine_weight_b   = self.combine_weight_a
         self.id_classifier_b    = self.id_classifier_a   # 两个分类器 是共享参数的。
@@ -246,7 +244,7 @@ class HICMDPP(nn.Module):
     
 
     # 更新源域和目标域的参数训练。
-    def go_train_mix( self, data, opt, phase, cnt, epoch, mode_code ):   
+    def go_train_mix( self, data, opt, phase, cnt, epoch, mode_code, config ):   
         # data:一共6个元素，每个元素的尺度是 1×3×256×128
         # Batch sampler
         if phase in opt.phase_train:    # 如果 phase== "train_all"
@@ -269,26 +267,27 @@ class HICMDPP(nn.Module):
         pos_b1_idx     = [x for x in range(num_pos) if x % 4 == 2]   # pos_b1_idx = [2,6]
         pos_b2_idx     = [x for x in range(num_pos) if x % 4 == 3]   # pos_b2_idx = [3,7]
 
-        x_a1 = pos_all[pos_a1_idx]    # 获取pos_all中 第0,4个元素。   这个x_a1, x_a2 表示的是3*256*128的图像。和文献第4章对应。
-        x_a2 = pos_all[pos_a2_idx]    # 获取pos_all中 第1,5的元素。  对于正向例子，每个是2张图。
-        x_b1 = pos_all[pos_b1_idx]    # 获取pos_all中 第2,6的元素。
-        x_b2 = pos_all[pos_b2_idx]    # 获取pos_all中 第3,7的元素。
+        x_a1 = pos_all[pos_a1_idx]    # 获取pos_all中 第0,4个元素。  两个RGB图像，一个和INDEX同类，一个不同类。
+        x_a2 = pos_all[pos_a2_idx]    # 获取pos_all中 第1,5的元素。  两个RGB图像，
+        x_b1 = pos_all[pos_b1_idx]    # 获取pos_all中 第2,6的元素。  两个IR图像，一个和index同类别，一个不同类别。
+        x_b2 = pos_all[pos_b2_idx]    # 获取pos_all中 第3,7的元素。  两个IR图像，一个和index同类别，一个不同类别。
 
         labels_a1 = pos_label_all[pos_a1_idx]    # 获取pos_label_all中 第0,4的元素。    这里的label对应标签，也就是图片所在文件夹的编号。
         labels_a2 = pos_label_all[pos_a2_idx]    # 获取pos_label_all中 第1,5的元素。
         labels_b1 = pos_label_all[pos_b1_idx]    # 获取pos_label_all中 第2,6的元素。
         labels_b2 = pos_label_all[pos_b2_idx]    # 获取pos_label_all中 第3,7的元素。
 
-        modals_a1 = pos_modal_all[pos_a1_idx]    # Get the 0-st 4st element.  modal表示对应的图像的模态，即红外还是可见光。
-        modals_a2 = pos_modal_all[pos_a2_idx]    # 用1，0来进行区分。
-        modals_b1 = pos_modal_all[pos_b1_idx]
-        modals_b2 = pos_modal_all[pos_b2_idx]
+        modals_a1 = pos_modal_all[pos_a1_idx]    # 两个RGB。
+        modals_a2 = pos_modal_all[pos_a2_idx]    # 两个RGB。
+        modals_b1 = pos_modal_all[pos_b1_idx]    # 两个IR
+        modals_b2 = pos_modal_all[pos_b2_idx]    # 两个IR。
 
         cams_a1 = pos_cam_all[pos_a1_idx]   # Get the pos of 0 4 st element.
         cams_a2 = pos_cam_all[pos_a2_idx]   # 判断相机的类型，用1，0来区分。
         cams_b1 = pos_cam_all[pos_b1_idx]
         cams_b2 = pos_cam_all[pos_b2_idx]
 
+        # neg 得到和pos不同类但同域的两张RGB图像和两张IR图像
         if self.is_neg:              # 如果存在有效的neg则进行赋值，否则置为空列表。
             neg_all = neg[0]         # neg例子对应的是4张
             neg_label_all = attribute_neg['order'][0]    # 获取负样本的标签数据。 neg_label_all
@@ -297,8 +296,8 @@ class HICMDPP(nn.Module):
             num_neg = neg_all.size(0)                    # 负样本的数量。
             neg_a_idx = [x for x in range(num_neg) if x < opt.neg_mini_batch]   # 根据opt.neg_mini_batch将负样本一分为二 。
             neg_b_idx = [x for x in range(num_neg) if x >= opt.neg_mini_batch]
-            neg_a = neg_all[neg_a_idx] # 对应的是2张
-            neg_b = neg_all[neg_b_idx] # 对应的是2张。
+            neg_a = neg_all[neg_a_idx] # 对应的是2张RGB图像
+            neg_b = neg_all[neg_b_idx] # 对应的是2张IR图像
             self.labels_neg_a = neg_label_all[neg_a_idx]   
             self.labels_neg_b = neg_label_all[neg_b_idx]
         else:
@@ -326,19 +325,28 @@ class HICMDPP(nn.Module):
             self.labels_b = labels_b1    # two lables of IR images.
             self.modals_a = modals_a1    # 对modal进行赋值
             self.modals_b = modals_b1
-            self.cams_a = cams_a1        # 对cam进行赋值
-            self.cams_b = cams_b1
-            self.case_a = case_a1        # 'RGB'
-            self.case_b = case_b1        # 'IR'
+            self.cams_a   = cams_a1        # 对cam进行赋值
+            self.cams_b   = cams_b1
+            self.case_a   = case_a1        # 'RGB'
+            self.case_b   = case_b1        # 'IR'
 
+            # x_a1:  两个RGB图像正向示例，一个和index同类，一个不同类。
+            # x_b1:  两个IR图像正向示例，一个和index同类，一个不同类。
+            # neg_a: 两个RGB图像负向示例。
+            # neg_b: 两个IR图像负向示例。
             if   mode_code == "aa":
                 self.dis_update_aa(x_a1, x_b1, opt, phase)                 
                 self.gen_update_aa(x_a1, x_b1, neg_a, neg_b, opt, phase)   
             elif mode_code == "bb":
                 self.dis_update_bb(x_a1, x_b1, opt, phase)                 
-                self.gen_update_bb(x_a1, x_b1, neg_a, neg_b, opt, phase)
+                self.gen_update_bb(x_a1, x_b1, neg_a, neg_b, opt, phase, config)
             elif mode_code == "ab":
+                # x_a1:来自源域。  x_b1：来自目标域。
+                # neg_a: 来自源域。 neg_b：来自目标域。
+                self.dis_update_ab(x_a1, x_b1, opt, phase)
+
                 pass
+
             elif mode_code == "ba":
                 pass
 
@@ -521,6 +529,340 @@ class HICMDPP(nn.Module):
             self.gen_IR_a = self.gen_b
         else:
             assert(False)
+
+
+    # 利用源域图像对源域的模型进行训练。TODO:
+    def dis_update_ab(self, x_a, x_b, opt, phase):
+        # x_a:来自源域， x_b来自目标域。
+        # Update discriminator
+        if self.case_a == 'RGB':
+            self.dis_a = self.dis_RGB_a  # 源域的RGB图像鉴别器。
+            self.gen_a = self.gen_RGB_a  # 源域的RGB图像生成器。
+        elif self.case_a == 'IR':
+            self.dis_a = self.dis_IR_a   # 
+            self.gen_a = self.gen_IR_a   # 
+        else:
+            assert(False)
+
+        if self.case_b == 'RGB':
+            self.dis_b = self.dis_RGB_b  # 目标域的RGB图像鉴别器。
+            self.gen_b = self.gen_RGB_b
+        elif self.case_b == 'IR':
+            self.dis_b = self.dis_IR_b
+            self.gen_b = self.gen_IR_b
+        else:
+            assert(False)
+
+
+        Do_dis_update = True  
+
+        if Do_dis_update:
+            # 始终是要执行这一部分。
+            if self.zero_grad_D:  
+                self.dom_dis_opt.zero_grad()    # 域鉴别器 参数梯度清零。
+                self.dis_optimizer.zero_grad()  # 图像鉴别器参数梯度置零。
+                self.zero_grad_D = False
+
+            with torch.no_grad():
+                # 这一步类似于try catch
+                if opt.D_input_dim == 1:
+                    Gx_a = self.single(x_a.clone())
+                    Gx_b = self.single(x_b.clone())
+                else:
+                    Gx_a = x_a.clone()
+                    Gx_b = x_b.clone()
+
+                Gx_a_raw = Gx_a.clone()
+                Gx_b_raw = Gx_b.clone()
+
+                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器(源域)   对输入图像 Gx_a(源域)进行编码。   得到原型编码 c_a(源域)
+                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器(目标域) 对输入图像 Gx_b(目标域)进行编码。  得到原型编码 c_b(目标域)
+
+                s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器(源域)   对输入图像Gx_a(源域)进行编码，    得到属性编码 s_a(源域)
+                s_b = self.gen_b.enc_att(Gx_b)  # 得到属性编码器(目标域) 对输入图像Gx_b(目标域)进行编码    得到属性编码 s_b(目标域)
+
+                s_a2 = s_a.clone()   # 对属性编码s_a(源域)进行复制。
+                s_b2 = s_b.clone()   # 对属性编码s_b(目标域)进行复制。
+                s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)  # 对属性编码中的ID无关编码进行交换。 得到交换后的属性编码。
+                # 注意！！！交换属性编码后，s_a,s_b 对应的编码位置进行了互换！！！
+                # 含义是，在后续图像生成中，交换了姿势和光照编码
+                x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)   # 根据原型编码c_b(目标域)和属性编码s_a(源域)   生成跨域合成图像x_ba。 
+                x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)   # 根据原型编码c_a(源域)和属性编码s_b(目标域)   生成跨域合成图像x_ab。
+
+            # 计算损失函数。
+            self.loss_dis_a = self.dis_a.calc_dis_loss(x_ba.detach(), Gx_a_raw)  
+            self.loss_dis_b = self.dis_b.calc_dis_loss(x_ab.detach(), Gx_b_raw)
+            self.loss_dis_total = (opt.w_gan * self.loss_dis_a + opt.w_gan * self.loss_dis_b)
+            
+            s_a3_add = s_a2.clone()   # 对属性编码s_a(源域)进行复制。
+            s_b3_add = s_b2.clone()   # 对属性编码s_b(目标域)进行复制。
+
+            # pose change
+            tmp = self.att_style_idx.copy()
+            tmp.extend(self.att_pose_idx)
+            s_a3_add, s_b3_add = change_two_index(s_a3_add, s_b3_add, tmp, self.att_illum_idx) # modality remain
+            # 这里的含义是，生成图像的时候，改变了姿势，但是光照不改变。即是说生成了同一个域的图像。
+            x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim) # (ID, pose) b, (modality) a
+            x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim) # (ID, pose) a, (modality) b
+
+            self.loss_dis_a3 = self.dis_a.calc_dis_loss(x_ba3.detach(), Gx_a_raw)   # 计算鉴别器的损失。
+            self.loss_dis_b3 = self.dis_b.calc_dis_loss(x_ab3.detach(), Gx_b_raw)
+            self.loss_dis_total += opt.w_gan * (self.loss_dis_a3 + self.loss_dis_b3)   # 记录对抗生成损失。
+
+            # 域鉴别器损失函数计算。--------------------------------------------------------
+            c_a_id, _ = self.backbone_pro_a(c_a, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
+            c_b_id, _ = self.backbone_pro_b(c_b, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
+
+            # Extract the style attribute codes.
+            s_a_id = torch_gather(s_a2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
+            s_b_id = torch_gather(s_b2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
+
+            # Nomilize the protetype and style attribute code.
+            c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))  # 将原型编码进行单位化。
+            s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))  # 将风格属性编码进行单位化。
+            c_b_id_norm = c_b_id.div(torch.norm(c_b_id, p=2, dim=1, keepdim=True).expand_as(c_b_id))  # 将原型编码进行单位化。
+            s_b_id_norm = s_b_id.div(torch.norm(s_b_id, p=2, dim=1, keepdim=True).expand_as(s_b_id))  # 将风格属性编码进行单位化。
+
+            # Combine the style attribute codes and the protetype codes.
+            c_a_id_norm *= min(self.combine_weight_a.multp, 1.0)
+            s_a_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
+            f0_a = torch.Tensor().cuda()
+            f0_a = torch.cat((f0_a, c_a_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+            f0_a = torch.cat((f0_a, s_a_id_norm), dim=1)
+            _, f1_a, _ = self.id_classifier_a(f0_a)       # 
+
+            c_b_id_norm *= min(self.combine_weight_a.multp, 1.0)
+            s_b_id_norm *= max((1.0 - self.combine_weight_a.multp), 0.0)
+            f0_b = torch.Tensor().cuda()
+            f0_b = torch.cat((f0_b, c_b_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+            f0_b = torch.cat((f0_b, s_b_id_norm), dim=1)
+            _, f1_b, _ = self.id_classifier_a(f0_b)
+
+            #Calculate the domain discrimintor loss.
+            self.loss_id_dis_ab, _, _ = self.dom_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
+            # 缺少参数。
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab
+            
+            
+            #----------------------------------------------------------------------------------------------
+            # Update the parameters
+            self.loss_id_dis_total.backward()    # domain discriminator loss backward.
+            self.dom_dis_opt.step()   # optimize the domain discriminator.
+            
+            self.loss_dis_total.backward(retain_graph=False) #*****GPU memory --> 40Mb / ?/ -60Mb
+            # 根据损失函数，进行反向回传。计算discriminator中参数对应于对抗损失函数的梯度。
+            self.dis_optimizer.step() #*****GPU memory --> 100Mb / 0
+            # 根据梯度，对鉴别器参数进行优化。
+            self.zero_grad_D = True
+
+            self.loss_type['D_a'] = opt.w_gan * self.loss_dis_a.item()  # scalar  
+            self.loss_type['D_b'] = opt.w_gan * self.loss_dis_b.item()  # 存储损失函数
+            self.loss_type['TOT_D'] = self.loss_dis_total.item()        # 存储总的损失函数
+            self.loss_type['D_domain'] = self.loss_id_dis_total.item()  # 存储域鉴别器损失函数
+
+        else:
+            try:
+                self.loss_type['D_a'] = self.old_loss_type['D_a']
+                self.loss_type['D_b'] = self.old_loss_type['D_b']
+                self.loss_type['TOT_D'] = self.old_loss_type['TOT_D']
+                self.loss_type['D_domain'] = self.old_loss_type['D_domain']
+            except:
+                self.loss_type['D_a'] = 0
+                self.loss_type['D_b'] = 0
+                self.loss_type['TOT_D'] = 0
+                self.loss_type['D_domain'] = 0
+
+        if self.case_a == 'RGB':
+            self.dis_RGB_a = self.dis_a  # 将优化更新后的鉴别器传回 原来的HICMD对象中。
+            self.gen_RGB_a = self.gen_a
+        elif self.case_a == 'IR':
+            self.dis_IR_a = self.dis_a
+            self.gen_IR_a = self.gen_a
+        else:
+            assert(False)
+
+        if self.case_b == 'RGB':
+            self.dis_RGB_b = self.dis_b
+            self.gen_RGB_b = self.gen_b
+        elif self.case_b == 'IR':
+            self.dis_IR_b = self.dis_b
+            self.gen_IR_b = self.gen_b
+        else:
+            assert(False)
+
+
+
+    ########################################################################
+    # 利用源域图像对源域的模型进行训练。
+    def dis_update_bb(self, x_a, x_b, opt, phase):
+
+        # Update discriminator
+        if self.case_a == 'RGB':
+            self.dis_a = self.dis_RGB_b  # 对RGB的鉴别器进行赋值
+            self.gen_a = self.gen_RGB_b  # 对RGB的生成器进行赋值。
+        elif self.case_a == 'IR':
+            self.dis_a = self.dis_IR_b   # 对IR的鉴别器进行赋值。 IR和RGB的模型均不相同。
+            self.gen_a = self.gen_IR_b   # 对IR的鉴别器进行赋值。 
+        else:
+            assert(False)
+
+        if self.case_b == 'RGB':
+            self.dis_b = self.dis_RGB_b  
+            self.gen_b = self.gen_RGB_b
+        elif self.case_b == 'IR':
+            self.dis_b = self.dis_IR_b
+            self.gen_b = self.gen_IR_b
+        else:
+            assert(False)
+
+        if self.cnt_cumul > 1:
+            # 对于第2次batch开始。
+            if self.cnt_cumul < opt.cnt_warmI2I: # only I2I
+                Do_dis_update = True
+            elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID
+                Do_dis_update = False
+            else:
+                Do_dis_update = True  # 执行这一句．
+        else:
+            Do_dis_update = True  # 第一次batch训练。
+
+        if Do_dis_update:
+            # 始终是要执行这一部分。
+            if self.zero_grad_D:                  
+                self.dom_dis_opt.zero_grad()      # 将模型参数梯度置零。         
+                self.dis_optimizer.zero_grad()    # 将图像鉴别器参数梯度置零。
+                self.zero_grad_D = False
+            # 值得注意的是，下属代码段执行后不会计算梯度。
+            with torch.no_grad():
+                # 这一步类似于try catch
+                if opt.D_input_dim == 1:
+                    Gx_a = self.single(x_a.clone())
+                    Gx_b = self.single(x_b.clone())
+                else:
+                    Gx_a = x_a.clone()
+                    Gx_b = x_b.clone()
+
+                Gx_a_raw = Gx_a.clone()
+                Gx_b_raw = Gx_b.clone()
+
+                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
+                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
+
+                s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a
+                s_b = self.gen_b.enc_att(Gx_b)  # 得到属性编码  s_b
+
+                s_a2 = s_a.clone()   # 对属性编码s_a 进行复制。
+                s_b2 = s_b.clone()   # 对属性编码s_b 进行复制。
+                s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)  # 对属性编码中的ID无关编码进行交换。 得到交换后的属性编码。
+                # 注意！！！交换属性编码后，s_a,s_b 对应的编码位置进行了互换！！！
+                # 含义是，在后续图像生成中，交换了姿势和光照编码
+                x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)   # 根据原型编码 c_b  和 属性编码  s_a   生成x_ba。 
+                x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)   # 根据原型编码 c_a  和 属性编码  s_b   生成x_ab。
+
+            # 计算损失函数。
+            #x_ba.detach() 表示从当前计算图中分离下来的，但是仍指向原变量的存放位置,不同之处只是requires_grad为false，得到的这个Variable永远不需要计算其梯度，不具有grad。
+            self.loss_dis_a = self.dis_a.calc_dis_loss(x_ba.detach(), Gx_a_raw)  # fake, real image [b x 1 x 64 x 32] matrix LSGAN
+            self.loss_dis_b = self.dis_b.calc_dis_loss(x_ab.detach(), Gx_b_raw)
+            self.loss_dis_total = (opt.w_gan * self.loss_dis_a + opt.w_gan * self.loss_dis_b)
+            # 计算跨域损失函数 L_{cross}^{Recon1}
+
+            s_a3_add = s_a2.clone()   # 对原始的  没有进行交换的 属性编码 进行复制。
+            s_b3_add = s_b2.clone()   # 对原始的  没有进行交换的 属性编码 进行复制。
+
+            # pose change
+            tmp = self.att_style_idx.copy()
+            tmp.extend(self.att_pose_idx)
+            s_a3_add, s_b3_add = change_two_index(s_a3_add, s_b3_add, tmp, self.att_illum_idx) # modality remain
+            # 这里的含义是，生成图像的时候，改变了姿势，但是光照不改变。即是说生成了同一个域的图像。
+            x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim) # (ID, pose) b, (modality) a
+            x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim) # (ID, pose) a, (modality) b
+
+            self.loss_dis_a3 = self.dis_a.calc_dis_loss(x_ba3.detach(), Gx_a_raw)   # 计算鉴别器的损失。
+            self.loss_dis_b3 = self.dis_b.calc_dis_loss(x_ab3.detach(), Gx_b_raw)
+            self.loss_dis_total += opt.w_gan * (self.loss_dis_a3 + self.loss_dis_b3)   # 记录对抗生成损失。
+
+            # 域鉴别器损失函数计算。--------------------------------------------------------
+            c_a_id, _ = self.backbone_pro_b(c_a, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
+            c_b_id, _ = self.backbone_pro_b(c_b, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
+
+            # Extract the style attribute codes.
+            s_a_id = torch_gather(s_a2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
+            s_b_id = torch_gather(s_b2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
+
+            # Nomilize the protetype and style attribute code.
+            c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))  # 将原型编码进行单位化。
+            s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))  # 将风格属性编码进行单位化。
+            c_b_id_norm = c_b_id.div(torch.norm(c_b_id, p=2, dim=1, keepdim=True).expand_as(c_b_id))  # 将原型编码进行单位化。
+            s_b_id_norm = s_b_id.div(torch.norm(s_b_id, p=2, dim=1, keepdim=True).expand_as(s_b_id))  # 将风格属性编码进行单位化。
+
+            # Combine the style attribute codes and the protetype codes.
+            c_a_id_norm *= min(self.combine_weight_b.multp, 1.0)
+            s_a_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+            f0_a = torch.Tensor().cuda()
+            f0_a = torch.cat((f0_a, c_a_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+            f0_a = torch.cat((f0_a, s_a_id_norm), dim=1)
+            _, f1_a, _ = self.id_classifier_b(f0_a)
+
+            c_b_id_norm *= min(self.combine_weight_b.multp, 1.0)
+            s_b_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
+            f0_b = torch.Tensor().cuda()
+            f0_b = torch.cat((f0_b, c_b_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
+            f0_b = torch.cat((f0_b, s_b_id_norm), dim=1)
+            _, f1_b, _ = self.id_classifier_b(f0_b)
+
+            #Calculate the domain discrimintor loss.
+            self.loss_id_dis_ab, _, _ = self.dom_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
+            # 缺少参数。
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab
+            
+            
+            #----------------------------------------------------------------------------------------------
+            # Update the parameters
+            self.loss_id_dis_total.backward()    # domain discriminator loss backward.
+            self.dom_dis_opt.step()   # optimize the domain discriminator.
+            
+            self.loss_dis_total.backward(retain_graph=False) #*****GPU memory --> 40Mb / ?/ -60Mb
+            # 根据损失函数，进行反向回传。计算discriminator中参数对应于对抗损失函数的梯度。
+            self.dis_optimizer.step() #*****GPU memory --> 100Mb / 0
+            # 根据梯度，对鉴别器参数进行优化。
+            self.zero_grad_D = True
+
+            # 损失函数的记录是否需要
+            self.loss_type['D_a']       = opt.w_gan * self.loss_dis_a.item()  # 存储IR/RGB鉴别器损失函数。
+            self.loss_type['D_b']       = opt.w_gan * self.loss_dis_b.item()  # 存储RGB/IR鉴别器损失函数。
+            self.loss_type['TOT_D']     = self.loss_dis_total.item()          # 存储图像鉴别器总的损失函数。
+            self.loss_type['D_domain']  = self.loss_id_dis_total.item()       # 存储域鉴别器损失函数，源域和目标域共享参数。
+
+        else:
+            try:
+                self.loss_type['D_a']      = self.old_loss_type['D_a']
+                self.loss_type['D_b']      = self.old_loss_type['D_b']
+                self.loss_type['TOT_D']    = self.old_loss_type['TOT_D']
+                self.loss_type['D_domain'] = self.old_loss_type['D_domain']
+            except:
+                self.loss_type['D_a']      = 0
+                self.loss_type['D_b']      = 0
+                self.loss_type['TOT_D']    = 0
+                self.loss_type['D_domain'] = 0
+
+        if self.case_a == 'RGB':
+            self.dis_RGB_b = self.dis_a  # 将优化更新后的鉴别器传回 原来的HICMD对象中。
+            self.gen_RGB_b = self.gen_a
+        elif self.case_a == 'IR':
+            self.dis_IR_b = self.dis_a
+            self.gen_IR_b = self.gen_a
+        else:
+            assert(False)
+
+        if self.case_b == 'RGB':
+            self.dis_RGB_b = self.dis_b
+            self.gen_RGB_b = self.gen_b
+        elif self.case_b == 'IR':
+            self.dis_IR_b = self.dis_b
+            self.gen_IR_b = self.gen_b
+        else:
+            assert(False)
+
 
 
     def gen_update_aa(self, x_a, x_b, neg_a, neg_b, opt, phase):
@@ -1057,179 +1399,10 @@ class HICMDPP(nn.Module):
             assert(False)
 
 
-    ########################################################################
-    # 利用源域图像对源域的模型进行训练。
-    def dis_update_bb(self, x_a, x_b, opt, phase):
-
-        # Update discriminator
-        if self.case_a == 'RGB':
-            self.dis_a = self.dis_RGB_b  # 对RGB的鉴别器进行赋值
-            self.gen_a = self.gen_RGB_b  # 对RGB的生成器进行赋值。
-        elif self.case_a == 'IR':
-            self.dis_a = self.dis_IR_b   # 对IR的鉴别器进行赋值。 IR和RGB的模型均不相同。
-            self.gen_a = self.gen_IR_b   # 对IR的鉴别器进行赋值。 
-        else:
-            assert(False)
-
-        if self.case_b == 'RGB':
-            self.dis_b = self.dis_RGB_b  
-            self.gen_b = self.gen_RGB_b
-        elif self.case_b == 'IR':
-            self.dis_b = self.dis_IR_b
-            self.gen_b = self.gen_IR_b
-        else:
-            assert(False)
-
-        if self.cnt_cumul > 1:
-            # 对于第2次batch开始。
-            if self.cnt_cumul < opt.cnt_warmI2I: # only I2I
-                Do_dis_update = True
-            elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID
-                Do_dis_update = False
-            else:
-                Do_dis_update = True  # 执行这一句．
-        else:
-            Do_dis_update = True  # 第一次batch训练。
-
-        if Do_dis_update:
-            # 始终是要执行这一部分。
-            if self.zero_grad_D:                  
-                self.dom_dis_opt.zero_grad()      # 将模型参数梯度置零。         
-                self.dis_optimizer.zero_grad()    # 将图像鉴别器参数梯度置零。
-                self.zero_grad_D = False
-            # 值得注意的是，下属代码段执行后不会计算梯度。
-            with torch.no_grad():
-                # 这一步类似于try catch
-                if opt.D_input_dim == 1:
-                    Gx_a = self.single(x_a.clone())
-                    Gx_b = self.single(x_b.clone())
-                else:
-                    Gx_a = x_a.clone()
-                    Gx_b = x_b.clone()
-
-                Gx_a_raw = Gx_a.clone()
-                Gx_b_raw = Gx_b.clone()
-
-                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
-                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
-
-                s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a
-                s_b = self.gen_b.enc_att(Gx_b)  # 得到属性编码  s_b
-
-                s_a2 = s_a.clone()   # 对属性编码s_a 进行复制。
-                s_b2 = s_b.clone()   # 对属性编码s_b 进行复制。
-                s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)  # 对属性编码中的ID无关编码进行交换。 得到交换后的属性编码。
-                # 注意！！！交换属性编码后，s_a,s_b 对应的编码位置进行了互换！！！
-                # 含义是，在后续图像生成中，交换了姿势和光照编码
-                x_ba = self.gen_a.dec(c_b, s_a, self.gen_a.enc_pro.output_dim)   # 根据原型编码 c_b  和 属性编码  s_a   生成x_ba。 
-                x_ab = self.gen_b.dec(c_a, s_b, self.gen_b.enc_pro.output_dim)   # 根据原型编码 c_a  和 属性编码  s_b   生成x_ab。
-
-            # 计算损失函数。
-            #x_ba.detach() 表示从当前计算图中分离下来的，但是仍指向原变量的存放位置,不同之处只是requires_grad为false，得到的这个Variable永远不需要计算其梯度，不具有grad。
-            self.loss_dis_a = self.dis_a.calc_dis_loss(x_ba.detach(), Gx_a_raw)  # fake, real image [b x 1 x 64 x 32] matrix LSGAN
-            self.loss_dis_b = self.dis_b.calc_dis_loss(x_ab.detach(), Gx_b_raw)
-            self.loss_dis_total = (opt.w_gan * self.loss_dis_a + opt.w_gan * self.loss_dis_b)
-            # 计算跨域损失函数 L_{cross}^{Recon1}
-
-            s_a3_add = s_a2.clone()   # 对原始的  没有进行交换的 属性编码 进行复制。
-            s_b3_add = s_b2.clone()   # 对原始的  没有进行交换的 属性编码 进行复制。
-
-            # pose change
-            tmp = self.att_style_idx.copy()
-            tmp.extend(self.att_pose_idx)
-            s_a3_add, s_b3_add = change_two_index(s_a3_add, s_b3_add, tmp, self.att_illum_idx) # modality remain
-            # 这里的含义是，生成图像的时候，改变了姿势，但是光照不改变。即是说生成了同一个域的图像。
-            x_ba3 = self.gen_a.dec(c_b, s_a3_add, self.gen_a.enc_pro.output_dim) # (ID, pose) b, (modality) a
-            x_ab3 = self.gen_b.dec(c_a, s_b3_add, self.gen_b.enc_pro.output_dim) # (ID, pose) a, (modality) b
-
-            self.loss_dis_a3 = self.dis_a.calc_dis_loss(x_ba3.detach(), Gx_a_raw)   # 计算鉴别器的损失。
-            self.loss_dis_b3 = self.dis_b.calc_dis_loss(x_ab3.detach(), Gx_b_raw)
-            self.loss_dis_total += opt.w_gan * (self.loss_dis_a3 + self.loss_dis_b3)   # 记录对抗生成损失。
-
-            # 域鉴别器损失函数计算。--------------------------------------------------------
-            c_a_id, _ = self.backbone_pro_b(c_a, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
-            c_b_id, _ = self.backbone_pro_b(c_b, multi_output=True)  # 进行原型编码的backbone。得到原型编码的向量形式。
-
-            # Extract the style attribute codes.
-            s_a_id = torch_gather(s_a2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
-            s_b_id = torch_gather(s_b2, self.att_style_idx, 1)       # 从2048维度的向量中提取1024维度的 风格 属性编码.
-
-            # Nomilize the protetype and style attribute code.
-            c_a_id_norm = c_a_id.div(torch.norm(c_a_id, p=2, dim=1, keepdim=True).expand_as(c_a_id))  # 将原型编码进行单位化。
-            s_a_id_norm = s_a_id.div(torch.norm(s_a_id, p=2, dim=1, keepdim=True).expand_as(s_a_id))  # 将风格属性编码进行单位化。
-            c_b_id_norm = c_b_id.div(torch.norm(c_b_id, p=2, dim=1, keepdim=True).expand_as(c_b_id))  # 将原型编码进行单位化。
-            s_b_id_norm = s_b_id.div(torch.norm(s_b_id, p=2, dim=1, keepdim=True).expand_as(s_b_id))  # 将风格属性编码进行单位化。
-
-            # Combine the style attribute codes and the protetype codes.
-            c_a_id_norm *= min(self.combine_weight_b.multp, 1.0)
-            s_a_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
-            f0_a = torch.Tensor().cuda()
-            f0_a = torch.cat((f0_a, c_a_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
-            f0_a = torch.cat((f0_a, s_a_id_norm), dim=1)
-            _, f1_a, _ = self.id_classifier_b(f0_a)
-
-            c_b_id_norm *= min(self.combine_weight_b.multp, 1.0)
-            s_b_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
-            f0_b = torch.Tensor().cuda()
-            f0_b = torch.cat((f0_b, c_b_id_norm), dim=1)  # 将原型编码和风格属性编码组合在一起。形成f0.
-            f0_b = torch.cat((f0_b, s_b_id_norm), dim=1)
-            _, f1_b, _ = self.id_classifier_b(f0_b)
-
-            #Calculate the domain discrimintor loss.
-            self.loss_id_dis_ab, _, _ = self.dom_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
-            # 缺少参数。
-            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab
-            
-            
-            #----------------------------------------------------------------------------------------------
-            # Update the parameters
-            self.loss_id_dis_total.backward()    # domain discriminator loss backward.
-            self.dom_dis_opt.step()   # optimize the domain discriminator.
-            
-            self.loss_dis_total.backward(retain_graph=False) #*****GPU memory --> 40Mb / ?/ -60Mb
-            # 根据损失函数，进行反向回传。计算discriminator中参数对应于对抗损失函数的梯度。
-            self.dis_optimizer.step() #*****GPU memory --> 100Mb / 0
-            # 根据梯度，对鉴别器参数进行优化。
-            self.zero_grad_D = True
-
-            # 损失函数的记录是否需要
-            self.loss_type['D_a']       = opt.w_gan * self.loss_dis_a.item()  # 存储IR/RGB鉴别器损失函数。
-            self.loss_type['D_b']       = opt.w_gan * self.loss_dis_b.item()  # 存储RGB/IR鉴别器损失函数。
-            self.loss_type['TOT_D']     = self.loss_dis_total.item()          # 存储图像鉴别器总的损失函数。
-            self.loss_type['D_domain']  = self.loss_id_dis_total.item()       # 存储域鉴别器损失函数，源域和目标域共享参数。
-
-        else:
-            try:
-                self.loss_type['D_a']      = self.old_loss_type['D_a']
-                self.loss_type['D_b']      = self.old_loss_type['D_b']
-                self.loss_type['TOT_D']    = self.old_loss_type['TOT_D']
-                self.loss_type['D_domain'] = self.old_loss_type['D_domain']
-            except:
-                self.loss_type['D_a']      = 0
-                self.loss_type['D_b']      = 0
-                self.loss_type['TOT_D']    = 0
-                self.loss_type['D_domain'] = 0
-
-        if self.case_a == 'RGB':
-            self.dis_RGB_b = self.dis_a  # 将优化更新后的鉴别器传回 原来的HICMD对象中。
-            self.gen_RGB_b = self.gen_a
-        elif self.case_a == 'IR':
-            self.dis_IR_b = self.dis_a
-            self.gen_IR_b = self.gen_a
-        else:
-            assert(False)
-
-        if self.case_b == 'RGB':
-            self.dis_RGB_b = self.dis_b
-            self.gen_RGB_b = self.gen_b
-        elif self.case_b == 'IR':
-            self.dis_IR_b = self.dis_b
-            self.gen_IR_b = self.gen_b
-        else:
-            assert(False)
+    
 
 
-    def gen_update_bb(self, x_a, x_b, neg_a, neg_b, opt, phase):
+    def gen_update_bb(self, x_a, x_b, neg_a, neg_b, opt, phase,config):
 
         # 这个函数是go_train中主要调用的函数。   这里的x_a，x_b都是两张图。
         if self.case_a == 'RGB':
@@ -1416,6 +1589,8 @@ class HICMDPP(nn.Module):
         ##########################################################################
         # HFL (Hierarchical Feature Learning)
         ##########################################################################
+        if config['id_tgt'] ==False:  # 根据标签值，判断是否需要使用
+            Do_id_update = False 
 
         if Do_id_update:
 
@@ -3444,11 +3619,11 @@ class HICMDPP(nn.Module):
         state_dict = torch.load(model_name)
         iterations = int(model_name[-10:-3])
         # 源域的分类器和HFL参数。
-        self.id_classifier_a.load_state_dict(state_dict['id'])
-        self.backbone_pro_a.load_state_dict(state_dict['backbone_pro'])
+        #self.id_classifier_a.load_state_dict(state_dict['id'])  # 因为伪标签的图像类别总数会发生变化。
+        self.backbone_pro_a.load_state_dict(state_dict['backbone_pro'])    
         self.combine_weight_a.load_state_dict(state_dict['combine_weight'])
         # 目标域的分类器和HFL参数。 目标域和源域共享参数。
-        self.id_classifier_b  = self.id_classifier_a
+        # self.id_classifier_b  = self.id_classifier_a
         self.backbone_pro_b   = self.backbone_pro_a
         self.combine_weight_b = self.combine_weight_a
 
