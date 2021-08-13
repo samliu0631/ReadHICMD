@@ -20,6 +20,7 @@ from S_GetConfig import *    # added by sam.
 version =  torch.__version__
 
 
+
 # 输入参数的定义
 parser = argparse.ArgumentParser(description='Training')  # 创建ArgumentParser对象。
 parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0, 1, 2')
@@ -85,6 +86,8 @@ for round_idx in range(config['max_round']):
    
    # TODO: Finish the pseudo label generation.
    # trainer.S_generate_pseudo_label(opt, config )  
+   # TODO： forward 是否需要修改。 
+
 
    if round_idx > 0:           
       # Load the pretrained HICMD model.     
@@ -126,27 +129,16 @@ for round_idx in range(config['max_round']):
          elif order_a < config['ID_class_a'] and order_b >= config['ID_class_a']:
             print("ab")
             mode_code ="ab"
-            # 如何处理数据。 把源域和目标域的数据进行重新组合。
-            # 源域序号。
-            SourceIndex    = [0,1,4,5]
-            TargetIndex    = [2,3,6,7]
-            SourceNegIndex = [0,1]
-            TargetNegIndex = [2,3]
-            inputs_a, pos_a, neg_a, attribute_a, attribute_pos_a, attribute_neg_a = data_a
-            inputs_b, pos_b, neg_b, attribute_b, attribute_pos_b, attribute_neg_b = data_b
-            pos = pos_a[SourceIndex]
-            pos = pos_b[TargetIndex]
-            # 改到这里。！！！！！！！！！！！！！！！！！！！！2021.8.8
-
-            
-            trainer.go_train_mix(data_b, opt, 'train_all' , cnt, epoch_ridx, mode_code,config ) 
+            data_ab = GenerateMixData( data_a, data_b )
+            trainer.go_train_mix(data_ab, opt, 'train_all' , cnt, epoch_ridx, mode_code, config ) 
             epoch_cnt = trainer.cnt_cumul
 
 
          elif order_a >= config['ID_class_a'] and order_b < config['ID_class_a']:
             print("ba")
             mode_code = "ba"
-            # trainer.go_train_ba
+            data_ba = GenerateMixData( data_a, data_b ) # 仔细确认这部分。
+            trainer.go_train_mix(data_ba, opt, 'train_all' , cnt, epoch_ridx, mode_code, config )
             epoch_cnt = trainer.cnt_cumul
 
 
@@ -160,3 +152,4 @@ for round_idx in range(config['max_round']):
    # 更新模型加载路径。
    checkpoint_directory_prev = checkpoint_directory        
          
+      
