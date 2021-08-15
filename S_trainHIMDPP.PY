@@ -46,13 +46,16 @@ opt = opt_settings(opt)
 
 dataloaders_Source, dataloaders_train_tsne_Source, old_train_dataloader_Source, data_info_Source, data_sample_Source, opt = data_settings(opt)
 opt = opt_test_settings(opt)
+pp = print_and_plot(opt)            # used to print and plot result.
 
 
 # Set the parameters
 config           = get_config("./Configs/RegDB2SYSU.yaml")
 output_directory = "/home/tianyu/code/SamWorkSpace/HiCMD-master/data/MixDatasets"
 epoch_round      = config['epoch_round_adv']
-
+iterations       = 0 # 总的迭代次数。
+nepoch           = 0 
+   
 # 跨域训练config['max_round']轮
 for round_idx in range(config['max_round']): 
    
@@ -60,7 +63,7 @@ for round_idx in range(config['max_round']):
    round_output_directory = os.path.join(output_directory, str(round_idx))
    # 设置断点，图像，和伪标签的存储路径。
    checkpoint_directory, image_directory, pseudo_directory = prepare_sub_folder_pseudo(round_output_directory)  
-   config['data_root'] = pseudo_directory  # 存储伪标签的存储路径。
+   config['data_root'] = pseudo_directory  # 更新伪标签的存储路径。
 
 
    # At the round of adv_warm_max_round, we switch to self-training
@@ -68,7 +71,7 @@ for round_idx in range(config['max_round']):
       config['lr2'] *= config['lr2_ramp_factor']   # The factor to multiply the lr2 after switching to self-training
       config['id_adv_w'] = 0.0
       config['id_adv_w_max'] = 0.0     # TODO: 搞清楚这些参数的作用，以及是否需要使用。
-      config['id_tgt'] = True          # TODO: 要考虑是否使用
+      config['id_tgt'] = True         
       config['teacher'] = '' # we do not use teacher in the self-training
       if config['aa_drop']:
             config['aa'] = False
@@ -115,19 +118,19 @@ for round_idx in range(config['max_round']):
          order_b = data_b[3]['order']
          
          if order_a < config['ID_class_a'] and order_b < config['ID_class_a']:
-            print("aa")
+            # print("aa")
             mode_code = "aa"
             trainer.go_train_mix(data_a, opt, 'train_all' , cnt, epoch_ridx, mode_code,config)  
             epoch_cnt = trainer.cnt_cumul  
 
          elif order_a >= config['ID_class_a'] and order_b >= config['ID_class_a']:
-            print('bb')
+            # print('bb')
             mode_code = "bb"
             trainer.go_train_mix(data_b, opt, 'train_all' , cnt, epoch_ridx, mode_code,config ) 
             epoch_cnt = trainer.cnt_cumul
          
          elif order_a < config['ID_class_a'] and order_b >= config['ID_class_a']:
-            print("ab")
+            # print("ab")
             mode_code ="ab"
             data_ab = GenerateMixData( data_a, data_b )
             trainer.go_train_mix(data_ab, opt, 'train_all' , cnt, epoch_ridx, mode_code, config ) 
@@ -135,18 +138,38 @@ for round_idx in range(config['max_round']):
 
 
          elif order_a >= config['ID_class_a'] and order_b < config['ID_class_a']:
-            print("ba")
+            # print("ba")
             mode_code = "ba"
             data_ba = GenerateMixData( data_a, data_b ) # 仔细确认这部分。
             trainer.go_train_mix(data_ba, opt, 'train_all' , cnt, epoch_ridx, mode_code, config )
             epoch_cnt = trainer.cnt_cumul
 
+         # Print, record, and plot the training results
+         if ( (cnt + 1) % opt.cnt_print_loss == 0  ) :
+            pp.print_info(opt, epoch_ridx, cnt, len(dataloaders_a) - 1, trainer.loss_type, trainer.acc_type, trainer.etc_type, trainer.cnt_cumul)  # 打印训练数据信息
+
+         # print training index.
+         iterations += 1
+         subiterations += 1
+         if (iterations + 1) % config['log_iter'] == 0:
+            print("\033[1m Round: %02d  Epoch: %02d Iteration: %08d/%08d \033[0m \n" % (round_idx, nepoch, subiterations + 1, config['epoch_iteration'] * epoch_round), end=" ")
+
+         # 如果累计训练达到5000次，进行一次存储。
+         if epoch_cnt % 5000 == 0:      
+            trainer.save(checkpoint_directory)
 
          # 更新训练参数。
          trainer.update_learning_rate(opt, 'train_all') 
 
+      nepoch +=1  # update total epoch number.
       # TODO： 理清更新关系，确定config的更新参数。
       dataloaders_a, dataloaders_b = get_mix_data_loaders(opt, config)
+      
+      # adjust the total epochs per round
+      epoch_ridx += 1  # update the epoch_ridx.
+      if epoch_ridx == epoch_round and round_idx == 0:
+         epoch_round = config['epoch_round']  #
+         break
 
    trainer.save(checkpoint_directory)
    # 更新模型加载路径。

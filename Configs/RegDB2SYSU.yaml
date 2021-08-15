@@ -14,6 +14,7 @@ epoch_round_adv: 22       # 产生一次伪标签后，数据集合训练的次�
 ID_class_a: 206                  # The number of ID classes of source domain. Eg:RegDB:206
 ID_class_b: 0
 id_tgt: false
+log_iter: 100                      # How often do you want to log the training stats
 
 gen:
   activ: lrelu                   # activation function style [relu/lrelu/prelu/selu/tanh]

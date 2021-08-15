@@ -3319,6 +3319,8 @@ class HICMDPP(nn.Module):
         # todo: change the model ouput dir.
         if not os.path.isdir(checkpoint_dir):
             os.mkdir(checkpoint_dir)
+
+        # 迭代次数是通过self.cnt_cumul来确定的。
         gen_name_a   = os.path.join( checkpoint_dir, 'gen_a_{}.pt'.format(str(self.cnt_cumul).zfill(7)))
         gen_name_b   = os.path.join( checkpoint_dir, 'gen_b_{}.pt'.format(str(self.cnt_cumul).zfill(7)))
         dis_name     = os.path.join( checkpoint_dir, 'dis_{}.pt'.format(str(self.cnt_cumul).zfill(7)))
