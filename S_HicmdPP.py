@@ -492,7 +492,7 @@ class HICMDPP(nn.Module):
             #Calculate the domain discrimintor loss.
             self.loss_id_dis_aa, _, _ = self.dom_dis.calc_dis_loss_aa(f1_a.detach(), f1_b.detach())
             # 缺少参数。
-            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_aa if config['id_adv_w'] > 0 else 0
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_aa*config['id_adv_w']
             
             
             #----------------------------------------------------------------------------------------------
@@ -652,7 +652,7 @@ class HICMDPP(nn.Module):
             #Calculate the domain discrimintor loss.
             self.loss_id_dis_ab, _, _ = self.dom_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
             # 缺少参数。
-            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab if config['id_adv_w'] > 0 else 0
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab * config['id_adv_w']
             
             
             #----------------------------------------------------------------------------------------------
@@ -824,7 +824,7 @@ class HICMDPP(nn.Module):
             #Calculate the domain discrimintor loss.
             self.loss_id_dis_bb, _, _ = self.dom_dis.calc_dis_loss_bb(f1_a.detach(), f1_b.detach())
             # 缺少参数。
-            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_bb if config['id_adv_w'] > 0 else 0
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_bb*config['id_adv_w']
             
             
             #----------------------------------------------------------------------------------------------
