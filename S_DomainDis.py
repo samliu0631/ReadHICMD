@@ -66,21 +66,15 @@ class IdDis(nn.Module):
         return outputs
 
     def calc_dis_loss_ab(self, input_s, input_t):
-        # input_s:源域特征, input_t:目标域特征.
-        outs0 = self.forward(input_s)  # 源域特征记为0.
-        outs1 = self.forward(input_t)  # 目标域特征记为1.
-
-        #inputs = torch.cat((input_s, input_t), dim=0)  
-        #outs = self.forward(inputs)   # 只能进行一次forward。
-        #outs0 = outs[0:2]
-        #outs1 = outs[2:4]  # 这里边把输入数量确定了，可能存在问题。后期需要修改以下。
-
+        outs0 = self.forward(input_s)
+        outs1 = self.forward(input_t) # outs1 和 outs0 在这里是一个数字。
         loss = 0
+
         reg = 0.0
-        for it, (out0, out1) in enumerate(zip(outs0, outs1)): # 因为1个batch有多张图像，所以要逐个计算。
+        for it, (out0, out1) in enumerate(zip(outs0, outs1)):
             if self.gan_type == 'lsgan':
+                # 作者使用的是lsgan。
                 loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2) # 0 indicates source and 1 indicates target
-                #loss += torch.mean((out0 - 1)**2) + torch.mean((out1 - 0) ** 2)  # 0 indicates source and 1 indicates target
             elif self.gan_type == 'nsgan':
                 all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
                 all1 = Variable(torch.ones_like(out1.data).cuda(), requires_grad=False)
@@ -91,6 +85,76 @@ class IdDis(nn.Module):
 
         loss = loss+reg
         return loss, reg, 0.0
+
+    def calc_dis_loss_aa(self, input_s0, input_s1):
+        # 用来判断两个同域特征的 损失函数。
+        outs0 = self.forward(input_s0)
+        outs1 = self.forward(input_s1)
+        loss = 0
+
+        reg = 0.0
+        for it, (out0, out1) in enumerate(zip(outs0, outs1)):
+            if self.gan_type == 'lsgan':  # 作者使用的是lsgan。
+                loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 0)**2)
+            elif self.gan_type == 'nsgan':
+                all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
+                all1 = Variable(torch.zeros_like(out1.data).cuda(), requires_grad=False)
+                loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all0) +
+                                   F.binary_cross_entropy(F.sigmoid(out1), all1))
+            else:
+                assert 0, "Unsupported GAN type: {}".format(self.gan_type)
+
+        loss = loss+reg
+        return loss, reg, 0.0
+
+    def calc_dis_loss_bb(self, input_t0, input_t1):
+        outs0 = self.forward(input_t0)
+        outs1 = self.forward(input_t1)
+        loss = 0
+
+        reg = 0.0
+        for it, (out0, out1) in enumerate(zip(outs0, outs1)):
+            if self.gan_type == 'lsgan':
+                loss += torch.mean((out0 - 1)**2) + torch.mean((out1 - 1)**2)
+                # 目标域的 域编号是1 . 所以与鉴别器的输出要和1 作比较。
+            elif self.gan_type == 'nsgan':
+                all0 = Variable(torch.ones_like(out0.data).cuda(), requires_grad=False)
+                all1 = Variable(torch.ones_like(out1.data).cuda(), requires_grad=False)
+                loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all0) +
+                                   F.binary_cross_entropy(F.sigmoid(out1), all1))
+            else:
+                assert 0, "Unsupported GAN type: {}".format(self.gan_type)
+
+        loss = loss+reg
+        return loss, reg, 0.0
+        
+
+    # def calc_dis_loss_ab(self, input_s, input_t):
+    #     # input_s:源域特征, input_t:目标域特征.
+    #     outs0 = self.forward(input_s)  # 源域特征记为0.
+    #     outs1 = self.forward(input_t)  # 目标域特征记为1.
+
+    #     #inputs = torch.cat((input_s, input_t), dim=0)  
+    #     #outs = self.forward(inputs)   # 只能进行一次forward。
+    #     #outs0 = outs[0:2]
+    #     #outs1 = outs[2:4]  # 这里边把输入数量确定了，可能存在问题。后期需要修改以下。
+
+    #     loss = 0
+    #     reg = 0.0
+    #     for it, (out0, out1) in enumerate(zip(outs0, outs1)): # 因为1个batch有多张图像，所以要逐个计算。
+    #         if self.gan_type == 'lsgan':
+    #             loss += torch.mean((out0 - 0)**2) + torch.mean((out1 - 1)**2) # 0 indicates source and 1 indicates target
+    #             #loss += torch.mean((out0 - 1)**2) + torch.mean((out1 - 0) ** 2)  # 0 indicates source and 1 indicates target
+    #         elif self.gan_type == 'nsgan':
+    #             all0 = Variable(torch.zeros_like(out0.data).cuda(), requires_grad=False)
+    #             all1 = Variable(torch.ones_like(out1.data).cuda(), requires_grad=False)
+    #             loss += torch.mean(F.binary_cross_entropy(F.sigmoid(out0), all0) +
+    #                                F.binary_cross_entropy(F.sigmoid(out1), all1))
+    #         else:
+    #             assert 0, "Unsupported GAN type: {}".format(self.gan_type)
+
+    #     loss = loss+reg
+    #     return loss, reg, 0.0
 
 
     def calc_gen_loss(self, input_t):

@@ -12,15 +12,15 @@ from data_sampler import get_attribute
 
 
 def prepare_sub_folder_pseudo(output_directory):
-    image_directory = os.path.join(output_directory, 'images')
+    image_directory = os.path.join(output_directory, 'images')   # 创建images路径 
     if not os.path.exists(image_directory):
         print("Creating directory: {}".format(image_directory))
         os.makedirs(image_directory)
-    checkpoint_directory = os.path.join(output_directory, 'checkpoints')
+    checkpoint_directory = os.path.join(output_directory, 'checkpoints') # 创建checkpoints路径。
     if not os.path.exists(checkpoint_directory):
         print("Creating directory: {}".format(checkpoint_directory))
         os.makedirs(checkpoint_directory)
-    pseudo_directory = os.path.join(output_directory, 'pseudo_train')
+    pseudo_directory = os.path.join(output_directory, 'pseudo_train') # 创建伪代码pseudo_train路径。
     if not os.path.exists(pseudo_directory):
         print("Creating directory: {}".format(pseudo_directory))
         os.makedirs(pseudo_directory)

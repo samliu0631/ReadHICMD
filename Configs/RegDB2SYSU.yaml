@@ -10,12 +10,17 @@ data_root_a:    /home/tianyu/code/SamWorkSpace/HiCMD-master/data/RegDB_01
 data_root_b:    /home/tianyu/code/SamWorkSpace/HiCMD-master/data/SYSU
 OuputModelDir:  /home/tianyu/code/SamWorkSpace/HiCMD-master/model/RegDB2SYSU    
 batch_size: 1
-epoch_round_adv: 22       # 产生一次伪标签后，数据集合训练的次数。
+epoch_round_adv: 1 #22             # 产生一次伪标签后，数据集合训练的次数。
 ID_class_a: 206                  # The number of ID classes of source domain. Eg:RegDB:206
 ID_class_b: 0
 id_tgt: false
 log_iter: 100                      # How often do you want to log the training stats
-
+id_adv_w: 1.000                  # The initial weight of domain ID adversarial loss
+aa: true                         # Whether to use the AA-type batch
+ab: true                         # Whether to use the AB-type batch
+bb: true                         # Whether to use the BB-type batch
+aa_drop: true                    # Whether to drop the aa batch in self-training
+epoch_round: 2
 gen:
   activ: lrelu                   # activation function style [relu/lrelu/prelu/selu/tanh]
   dec: basic                     # [basic/parallel/series]

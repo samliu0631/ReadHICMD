@@ -7,8 +7,9 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 import torch
 from S_data_sampler import S_PosNegSampler
-
-
+import os
+from torchvision import datasets, transforms
+from data_sampler import *
 
 # @Brief: 产生HICMDPP的训练数据加载器。
 def get_mix_data_loaders(opt,config):
@@ -73,8 +74,8 @@ def get_mix_image_index(conf):
     mixData     = ImageFolder(train_path)
     ab_list     = mixData.imgs                       # 获得数据集合内的图像列表。
     ab_idx      = [i for i in range(len(ab_list))]   # 获得数据集合的图像总数。
-    size_a      = conf['sample_a']                   # 源域的图像数量。
-    size_b      = conf['sample_b']                   # 目标域的图像数量。
+    size_a      = conf['sample_a']                   # 源域的图像数量。  NOTE： 这个参数在生成伪标签的过程会更新。
+    size_b      = conf['sample_b']                   # 目标域的图像数量。NOTE： 这个参数在生成伪标签的过程会更新。
 
     # 两个数据集 图像序号的完整列表。
     a_full_idx = ab_idx[0:size_a]   # 获得源域的图像索引号。
@@ -179,4 +180,22 @@ def get_mix_image_index(conf):
 
 
 
+# @Brief: Generate dataloader during test.
+def GenerateTestDataloader(opt):
+   data_info = {}           # Initial dict.
+   data_transforms = {}  
 
+   transform_val_list = []  # List used to store the different class instances for evaluation.
+   transform_val_list = transform_val_list + [transforms.Resize(size=(opt.h,opt.w),interpolation=3)]   # calling __init__ of each class.
+   transform_val_list = transform_val_list + [transforms.ToTensor()]
+   transform_val_list = transform_val_list + [transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
+          
+   for x in ['gallery', 'query','train_all']:       
+      data_transforms[x] = transforms.Compose(transform_val_list)   
+   image_datasets = { x: datasets.ImageFolder(    os.path.join(opt.data_dir, opt.data_name, x),   data_transforms[x]     )   for x in opt.phase_data}
+   dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.set_batchsize[x], shuffle=opt.set_shuffle[x],
+                                                  num_workers=opt.set_workers[x], pin_memory=opt.pin_memory, drop_last=opt.set_droplast[x]) for x in opt.phase_data}
+   data_info['gallery_cam'], data_info['gallery_label'], data_info['gallery_modal'] = get_attribute(  opt.data_flag,  image_datasets['gallery'].imgs,  flag = opt.type_domain_label )
+   data_info['query_cam'], data_info['query_label'], data_info['query_modal'] = get_attribute(opt.data_flag, image_datasets['query'].imgs, flag = opt.type_domain_label)
+     
+   return dataloaders, data_info

@@ -39,10 +39,16 @@ class HICMDPP(nn.Module):
         self.acc_type = {}
         self.etc_type = {}
         self.cnt_cumul = 0               # 用来记录训练次数。
-        self.loss_type['TOTAL'] = 0      #
+        self.loss_type['TOTAL_A'] = 0      #
+        self.loss_type['TOT_G_A'] = 0
+        self.loss_type['TOT_ID_A'] = 0
+        self.loss_type['TOTAL_B'] = 0      #
+        self.loss_type['TOT_G_B'] = 0
+        self.loss_type['TOT_ID_B'] = 0
+        self.loss_type['TOTAL_AB'] = 0      #
+        self.loss_type['TOT_G_AB'] = 0
+        self.loss_type['TOT_ID_AB'] = 0
         self.loss_type['TOT_D'] = 0
-        self.loss_type['TOT_G'] = 0
-        self.loss_type['TOT_ID'] = 0
         self.zero_grad_G = True
         self.zero_grad_D = True
         self.zero_grad_ID = True
@@ -223,7 +229,7 @@ class HICMDPP(nn.Module):
             self.backbone_pro_a     = self.backbone_pro_a.cuda()     
             self.combine_weight_a   = self.combine_weight_a.cuda()
             self.gen_RGB_a  = self.gen_RGB_a.cuda()
-            self.gen_IR     = self.gen_IR_a.cuda()
+            self.gen_IR_a   = self.gen_IR_a.cuda()
             self.gen_RGB_b  = self.gen_RGB_b.cuda()
             self.gen_IR_b   = self.gen_IR_b.cuda()
             self.dis_RGB_a  = self.dis_RGB_a.cuda()
@@ -337,17 +343,17 @@ class HICMDPP(nn.Module):
             if   mode_code == "aa":
                 # x_a1:  源域2张RGB。  x_b1： 源域2张IR。
                 # neg_a: 源域2张RGB。  neg_b：源域2张IR。
-                self.dis_update_aa(x_a1, x_b1, opt, phase)                 
-                self.gen_update_aa(x_a1, x_b1, neg_a, neg_b, opt, phase)   
+                self.dis_update_aa(x_a1, x_b1, opt, phase, config)                 
+                self.gen_update_aa(x_a1, x_b1, neg_a, neg_b, opt, phase, config)   
             elif mode_code == "bb":
                 # x_a1:  目标域2张RGB。  x_b1： 目标域2张IR。
                 # neg_a: 目标域2张RGB。  neg_b：目标域2张IR。
-                self.dis_update_bb(x_a1, x_b1, opt, phase)                 
+                self.dis_update_bb(x_a1, x_b1, opt, phase, config)                 
                 self.gen_update_bb(x_a1, x_b1, neg_a, neg_b, opt, phase, config)
             elif mode_code == "ab":
                 # x_a1:  源域2张RGB。  x_b1： 目标域2张IR。
                 # neg_a: 源域2张RGB。  neg_b：目标域2张IR。
-                self.dis_update_ab(x_a1, x_b1, opt, phase)
+                self.dis_update_ab(x_a1, x_b1, opt, phase, config)
                 self.gen_update_ab(x_a1, x_b1, neg_a, neg_b, opt, phase, config)
                 
             elif mode_code == "ba":
@@ -360,7 +366,7 @@ class HICMDPP(nn.Module):
                 tem = copy.deepcopy(self.labels_neg_a)
                 self.labels_neg_a = copy.deepcopy(self.labels_neg_b)
                 self.labels_neg_b = tem
-                self.dis_update_ab(x_b1, x_a1, opt, phase)
+                self.dis_update_ab(x_b1, x_a1, opt, phase, config)
                 self.gen_update_ab(x_b1, x_a1, neg_b, neg_a, opt, phase, config)
                 
 
@@ -376,9 +382,9 @@ class HICMDPP(nn.Module):
 
 
     # 利用源域图像对源域的模型进行训练。
-    def dis_update_aa(self, x_a, x_b, opt, phase):
+    def dis_update_aa(self, x_a, x_b, opt, phase, config):
 
-        # Update discriminator
+        # Update discriminator  源域
         if self.case_a == 'RGB':
             self.dis_a = self.dis_RGB_a  # 对RGB的鉴别器进行赋值
             self.gen_a = self.gen_RGB_a  # 对RGB的生成器进行赋值。
@@ -387,7 +393,7 @@ class HICMDPP(nn.Module):
             self.gen_a = self.gen_IR_a   # 对IR的鉴别器进行赋值。 
         else:
             assert(False)
-
+        # 目标域
         if self.case_b == 'RGB':
             self.dis_b = self.dis_RGB_a  
             self.gen_b = self.gen_RGB_a
@@ -397,16 +403,7 @@ class HICMDPP(nn.Module):
         else:
             assert(False)
 
-        if self.cnt_cumul > 1:
-            # 对于第2次batch开始。
-            if self.cnt_cumul < opt.cnt_warmI2I: # only I2I
-                Do_dis_update = True
-            elif self.cnt_cumul < opt.cnt_warmI2I + opt.cnt_warmID: # only ID
-                Do_dis_update = False
-            else:
-                Do_dis_update = True  # 执行这一句．
-        else:
-            Do_dis_update = True  # 第一次batch训练。
+        Do_dis_update = True  # 第一次batch训练。
 
         if Do_dis_update:
             # 始终是要执行这一部分。
@@ -427,14 +424,14 @@ class HICMDPP(nn.Module):
                 Gx_a_raw = Gx_a.clone()
                 Gx_b_raw = Gx_b.clone()
 
-                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a
-                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b
+                c_a = self.gen_a.enc_pro(Gx_a)  # 利用原型编码器 对输入图像 Gx_a进行编码。 得到原型编码 c_a(源域)
+                c_b = self.gen_b.enc_pro(Gx_b)  # 利用原型编码器 对输入图像 Gx_b进行编码。 得到原型编码 c_b(目标域)
 
-                s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a
-                s_b = self.gen_b.enc_att(Gx_b)  # 得到属性编码  s_b
+                s_a = self.gen_a.enc_att(Gx_a)  # 利用属性编码器 对输入图像Gx_a 进行编码，得到属性编码 s_a(源域)
+                s_b = self.gen_b.enc_att(Gx_b)  # 得到属性编码  s_b (目标域)
 
-                s_a2 = s_a.clone()   # 对属性编码s_a 进行复制。
-                s_b2 = s_b.clone()   # 对属性编码s_b 进行复制。
+                s_a2 = s_a.clone()              # 对属性编码s_a 进行复制。
+                s_b2 = s_b.clone()              # 对属性编码s_b 进行复制。
                 s_a, s_b = change_two_index(s_a, s_b, self.att_style_idx, self.att_ex_idx)  # 对属性编码中的ID无关编码进行交换。 得到交换后的属性编码。
                 # 注意！！！交换属性编码后，s_a,s_b 对应的编码位置进行了互换！！！
                 # 含义是，在后续图像生成中，交换了姿势和光照编码
@@ -493,9 +490,9 @@ class HICMDPP(nn.Module):
             _, f1_b, _ = self.id_classifier_a(f0_b)
 
             #Calculate the domain discrimintor loss.
-            self.loss_id_dis_ab, _, _ = self.dom_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
+            self.loss_id_dis_aa, _, _ = self.dom_dis.calc_dis_loss_aa(f1_a.detach(), f1_b.detach())
             # 缺少参数。
-            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_aa if config['id_adv_w'] > 0 else 0
             
             
             #----------------------------------------------------------------------------------------------
@@ -546,7 +543,7 @@ class HICMDPP(nn.Module):
 
 
     # 利用源域图像对源域的模型进行训练。TODO:
-    def dis_update_ab(self, x_a, x_b, opt, phase):
+    def dis_update_ab(self, x_a, x_b, opt, phase, config):
         # x_a:来自源域， x_b来自目标域。
         # Update discriminator
         if self.case_a == 'RGB':
@@ -655,7 +652,7 @@ class HICMDPP(nn.Module):
             #Calculate the domain discrimintor loss.
             self.loss_id_dis_ab, _, _ = self.dom_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
             # 缺少参数。
-            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab if config['id_adv_w'] > 0 else 0
             
             
             #----------------------------------------------------------------------------------------------
@@ -708,7 +705,7 @@ class HICMDPP(nn.Module):
 
     ########################################################################
     # 利用源域图像对源域的模型进行训练。
-    def dis_update_bb(self, x_a, x_b, opt, phase):
+    def dis_update_bb(self, x_a, x_b, opt, phase, config):
 
         # Update discriminator
         if self.case_a == 'RGB':
@@ -825,9 +822,9 @@ class HICMDPP(nn.Module):
             _, f1_b, _ = self.id_classifier_b(f0_b)
 
             #Calculate the domain discrimintor loss.
-            self.loss_id_dis_ab, _, _ = self.dom_dis.calc_dis_loss_ab(f1_a.detach(), f1_b.detach())
+            self.loss_id_dis_bb, _, _ = self.dom_dis.calc_dis_loss_bb(f1_a.detach(), f1_b.detach())
             # 缺少参数。
-            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_ab
+            self.loss_id_dis_total = opt.dom_dis_id_adv_w* self.loss_id_dis_bb if config['id_adv_w'] > 0 else 0
             
             
             #----------------------------------------------------------------------------------------------
@@ -879,7 +876,7 @@ class HICMDPP(nn.Module):
 
 
 
-    def gen_update_aa(self, x_a, x_b, neg_a, neg_b, opt, phase):
+    def gen_update_aa(self, x_a, x_b, neg_a, neg_b, opt, phase, config):
 
         # 这个函数是go_train中主要调用的函数。   这里的x_a，x_b都是两张图。
         if self.case_a == 'RGB':
@@ -958,13 +955,13 @@ class HICMDPP(nn.Module):
                 self.loss_gen_recon_x_a = self.recon_criterion(x_a_recon, Gx_a_raw)
                 self.loss_gen_recon_x_b = self.recon_criterion(x_b_recon, Gx_b_raw)
                 self.loss_gen_recon_x = opt.w_recon_x * (self.loss_gen_recon_x_a + self.loss_gen_recon_x_b)
-                self.loss_type['G_rec_x'] = self.loss_gen_recon_x.item() if self.loss_gen_recon_x != 0 else 0
+                self.loss_type['G_rec_x_A'] = self.loss_gen_recon_x.item() if self.loss_gen_recon_x != 0 else 0
 
                 # reconstruction loss (cross)
                 self.loss_gen_cross_x_ab = self.recon_criterion(x_ab_raw, Gx_b_raw)
                 self.loss_gen_cross_x_ba = self.recon_criterion(x_ba_raw, Gx_a_raw)
                 self.loss_gen_cross_x = opt.w_cross_x * (self.loss_gen_cross_x_ab + self.loss_gen_cross_x_ba)
-                self.loss_type['G_cross_x'] = self.loss_gen_cross_x.item() if self.loss_gen_cross_x != 0 else 0
+                self.loss_type['G_cross_x_A'] = self.loss_gen_cross_x.item() if self.loss_gen_cross_x != 0 else 0
 
                 # reconstruction loss (cycle)
                 if opt.w_cycle_x > 0:
@@ -974,7 +971,7 @@ class HICMDPP(nn.Module):
                     self.loss_gen_cyc_x_a = 0
                     self.loss_gen_cyc_x_b = 0
                 self.loss_gen_cyc_x = opt.w_cycle_x * (self.loss_gen_cyc_x_a + self.loss_gen_cyc_x_b)
-                self.loss_type['G_cyc_x'] = self.loss_gen_cyc_x.item() if self.loss_gen_cyc_x != 0 else 0
+                self.loss_type['G_cyc_x_A'] = self.loss_gen_cyc_x.item() if self.loss_gen_cyc_x != 0 else 0
 
                 # attribute code reconstruction loss    下面提取相应的属性和原型编码到对应的向量中。
                 att_style_s_a = torch_gather(s_a_id, self.att_style_idx, 1)                                  # 2个 1024 维度的风格属性编码，ID相关。
@@ -988,14 +985,14 @@ class HICMDPP(nn.Module):
 
                 self.loss_gen_recon_s = self.recon_criterion(att_ex_s_a, att_ex_s_a_recon)  # 计算L code recon
                 self.loss_gen_recon_s += self.recon_criterion(att_ex_s_b, att_ex_s_b_recon)
-                self.etc_type['S_remain'] = self.loss_gen_recon_s.item()
+                self.etc_type['S_remain_A'] = self.loss_gen_recon_s.item()
 
                 self.loss_gen_recon_s2 = self.recon_criterion(att_style_s_b, att_style_s_a_recon)
-                self.loss_gen_recon_s2 += self.recon_criterion(att_style_s_a, att_style_s_b_recon)
-                self.etc_type['S_ID'] = self.loss_gen_recon_s2.item()
+                self.loss_gen_recon_s2 += self.recon_criterion(att_style_s_a, att_style_s_b_recon)#@@@@@@
+                self.etc_type['S_ID_A'] = self.loss_gen_recon_s2.item()
                 self.loss_gen_recon_s += self.loss_gen_recon_s2
                 self.loss_gen_recon_s *= opt.w_recon_s
-                self.loss_type['G_rec_s'] = self.loss_gen_recon_s.item() if self.loss_gen_recon_s != 0 else 0
+                self.loss_type['G_rec_s_A'] = self.loss_gen_recon_s.item() if self.loss_gen_recon_s != 0 else 0
 
                 # KLD loss (attribute code to gaussian distribution)
                 self.loss_gen_s_a_kl = self.compute_kl(
@@ -1003,13 +1000,13 @@ class HICMDPP(nn.Module):
                 self.loss_gen_s_b_kl = self.compute_kl(
                     torch_gather(s_b, self.att_ex_idx, 1)) if opt.w_style_kl != 0 else 0
                 self.loss_gen_kl = opt.w_style_kl * (self.loss_gen_s_a_kl + self.loss_gen_s_b_kl)
-                self.loss_type['style_kl'] = self.loss_gen_kl.item() if self.loss_gen_kl != 0 else 0
+                self.loss_type['style_kl_A'] = self.loss_gen_kl.item() if self.loss_gen_kl != 0 else 0
 
                 # GAN loss
                 self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba_raw)
                 self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab_raw)
                 self.loss_gen_adv = opt.w_gan * (self.loss_gen_adv_a + self.loss_gen_adv_b)
-                self.loss_type['G_adv'] = self.loss_gen_adv.item() if self.loss_gen_adv != 0 else 0
+                self.loss_type['G_adv_A'] = self.loss_gen_adv.item() if self.loss_gen_adv != 0 else 0
                 s_a3_add = s_a2.clone()
                 s_b3_add = s_b2.clone()
 
@@ -1030,25 +1027,25 @@ class HICMDPP(nn.Module):
                 if opt.HFL_ratio > 0:
                     self.loss_gen_total *= (1.0 - opt.HFL_ratio)
 
-                self.loss_type['TOT_G'] = self.loss_gen_total.item()
+                self.loss_type['TOT_G_A'] = self.loss_gen_total.item()
 
             else:
                 try:
-                    self.loss_type['G_adv'] = self.old_loss_type['G_adv']
-                    self.loss_type['G_rec_x'] = self.old_loss_type['G_rec_x']
-                    self.loss_type['G_cyc_x'] = self.old_loss_type['G_cyc_x']
-                    self.loss_type['G_rec_s'] = self.old_loss_type['G_rec_s']
-                    self.loss_type['G_style_kl'] = self.old_loss_type['G_style_kl']
-                    self.loss_type['G_cross_x'] = self.old_loss_type['G_cross_x']
-                    self.loss_type['TOT_G'] = self.old_loss_type['TOT_G']
+                    self.loss_type['G_adv_A'] = self.old_loss_type['G_adv_A']
+                    self.loss_type['G_rec_x_A'] = self.old_loss_type['G_rec_x_A']
+                    self.loss_type['G_cyc_x_A'] = self.old_loss_type['G_cyc_x_A']
+                    self.loss_type['G_rec_s_A'] = self.old_loss_type['G_rec_s_A']
+                    self.loss_type['G_style_kl_A'] = self.old_loss_type['G_style_kl_A']
+                    self.loss_type['G_cross_x_A'] = self.old_loss_type['G_cross_x_A']
+                    self.loss_type['TOT_G_A'] = self.old_loss_type['TOT_G_A']
                 except:
-                    self.loss_type['G_adv'] = 0
-                    self.loss_type['G_rec_x'] = 0
-                    self.loss_type['G_cyc_x'] = 0
-                    self.loss_type['G_rec_s'] = 0
-                    self.loss_type['G_style_kl'] = 0
-                    self.loss_type['G_cross_x'] = 0
-                    self.loss_type['TOT_G'] = 0
+                    self.loss_type['G_adv_A'] = 0
+                    self.loss_type['G_rec_x_A'] = 0
+                    self.loss_type['G_cyc_x_A'] = 0
+                    self.loss_type['G_rec_s_A'] = 0
+                    self.loss_type['G_style_kl_A'] = 0
+                    self.loss_type['G_cross_x_A'] = 0
+                    self.loss_type['TOT_G_A'] = 0
 
         ##########################################################################
         # HFL (Hierarchical Feature Learning)
@@ -1287,8 +1284,8 @@ class HICMDPP(nn.Module):
             loss_all, acc_all, loss_cnt = self.apply_CE_loss_between_two_labels(opt, output_all_ce, label_all_ce,
                                                                                 num_part, 0.0, 0.0, 0.0)
             self.loss_CE = loss_all
-            self.acc_type['CE'] = acc_all / loss_cnt
-            self.loss_type['CE'] = self.loss_CE.item()
+            self.acc_type['CE_A'] = acc_all / loss_cnt
+            self.loss_type['CE_A'] = self.loss_CE.item()
 
             # Triplet loss
             loss_flag = opt.ID_TRIP_loss_flag
@@ -1308,12 +1305,12 @@ class HICMDPP(nn.Module):
                                                              loss_flag, w_trip_reg, w_trip, triplet_margin)
 
             self.loss_trip = loss_all
-            self.acc_type['Trip'] = acc_all / loss_cnt
-            self.etc_type['Trip_reg'] = reg_all / loss_cnt
-            self.etc_type['Trip_margin'] = margin_all / loss_cnt
-            self.etc_type['Trip_pscore'] = pscore_all / loss_cnt
-            self.etc_type['Trip_nscore'] = nscore_all / loss_cnt
-            self.loss_type['TRIP'] = self.loss_trip.item() if self.loss_trip != 0 else 0
+            self.acc_type['Trip_A'] = acc_all / loss_cnt
+            self.etc_type['Trip_reg_A'] = reg_all / loss_cnt
+            self.etc_type['Trip_margin_A'] = margin_all / loss_cnt
+            self.etc_type['Trip_pscore_A'] = pscore_all / loss_cnt
+            self.etc_type['Trip_nscore_A'] = nscore_all / loss_cnt
+            self.loss_type['TRIP_A'] = self.loss_trip.item() if self.loss_trip != 0 else 0
 
             # 计算域鉴别器在鉴别图像域的时候产生的损失函数。
             self.loss_dom_adv = 0.0  
@@ -1324,25 +1321,25 @@ class HICMDPP(nn.Module):
             if opt.HFL_ratio > 0:
                 self.loss_id_total *= opt.HFL_ratio
 
-            self.loss_type['TOT_ID'] = self.loss_id_total.item()
+            self.loss_type['TOT_ID_A'] = self.loss_id_total.item()
 
         else:
             try:
-                self.loss_type['TOT_ID'] = self.old_loss_type['TOT_ID']
-                self.loss_type['CE'] = self.loss_type['CE']
-                self.acc_type['CE'] = self.acc_type['CE']
-                self.loss_type['TRIP'] = self.loss_type['TRIP']
-                self.acc_type['Trip'] = self.acc_type['Trip']
-                self.etc_type['Trip_reg'] = self.etc_type['Trip_reg']
-                self.etc_type['Trip_margin'] = self.etc_type['Trip_margin']
+                self.loss_type['TOT_ID_A'] = self.old_loss_type['TOT_ID_A']
+                self.loss_type['CE_A'] = self.loss_type['CE_A']
+                self.acc_type['CE_A'] = self.acc_type['CE_A']
+                self.loss_type['TRIP_A'] = self.loss_type['TRIP_A']
+                self.acc_type['Trip_A'] = self.acc_type['Trip_A']
+                self.etc_type['Trip_reg_A'] = self.etc_type['Trip_reg_A']
+                self.etc_type['Trip_margin_A'] = self.etc_type['Trip_margin_A']
             except:
-                self.loss_type['TOT_ID'] = 0
-                self.loss_type['CE'] = 0
-                self.acc_type['CE'] = 0
-                self.loss_type['TRIP'] = 0
-                self.acc_type['Trip'] = 0
-                self.etc_type['Trip_reg'] = 0
-                self.etc_type['Trip_margin'] = 0
+                self.loss_type['TOT_ID_A'] = 0
+                self.loss_type['CE_A'] = 0
+                self.acc_type['CE_A'] = 0
+                self.loss_type['TRIP_A'] = 0
+                self.acc_type['Trip_A'] = 0
+                self.etc_type['Trip_reg_A'] = 0
+                self.etc_type['Trip_margin_A'] = 0
 
         
         
@@ -1357,16 +1354,16 @@ class HICMDPP(nn.Module):
             self.zero_grad_G = True
             self.id_optimizer.step()
             self.zero_grad_ID = True
-            self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
+            self.loss_type['TOTAL_A'] = self.loss_type['TOT_G_A'] + self.loss_type['TOT_ID_A'] + self.loss_type['TOT_D']
         elif Do_gen_update:
 
             self.loss_gen_total.backward()
             self.gen_optimizer_a.step()
             self.zero_grad_G = True
             try:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.old_loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_A'] = self.loss_type['TOT_G_A'] + self.old_loss_type['TOT_ID_A']  + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_A'] = self.loss_type['TOT_G_A'] + self.loss_type['TOT_ID_A']  + self.loss_type['TOT_D']
         elif Do_id_update:
             self.loss_id_total.backward()
             self.gen_optimizer_a.step()
@@ -1374,14 +1371,14 @@ class HICMDPP(nn.Module):
             self.id_optimizer.step()
             self.zero_grad_ID = True
             try:
-                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_A'] = self.old_loss_type['TOT_G_A'] + self.loss_type['TOT_ID_A']  + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_A'] = self.loss_type['TOT_G_A'] + self.loss_type['TOT_ID_A']  + self.loss_type['TOT_D']
         else:
             try:
-                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.old_loss_type['TOT_ID'] + self.old_loss_type['TOT_D']
+                self.loss_type['TOTAL_A'] = self.old_loss_type['TOT_G_A'] + self.old_loss_type['TOT_ID_A'] + self.old_loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_A'] = self.loss_type['TOT_G_A'] + self.loss_type['TOT_ID_A'] + self.loss_type['TOT_D']
 
 
         if self.case_a == 'RGB':
@@ -1407,7 +1404,7 @@ class HICMDPP(nn.Module):
     
 
 
-    def gen_update_bb(self, x_a, x_b, neg_a, neg_b, opt, phase,config):
+    def gen_update_bb(self, x_a, x_b, neg_a, neg_b, opt, phase, config):
 
         # 这个函数是go_train中主要调用的函数。   这里的x_a，x_b都是两张图。
         if self.case_a == 'RGB':
@@ -1499,13 +1496,13 @@ class HICMDPP(nn.Module):
                 self.loss_gen_recon_x_a = self.recon_criterion(x_a_recon, Gx_a_raw)
                 self.loss_gen_recon_x_b = self.recon_criterion(x_b_recon, Gx_b_raw)
                 self.loss_gen_recon_x = opt.w_recon_x * (self.loss_gen_recon_x_a + self.loss_gen_recon_x_b)
-                self.loss_type['G_rec_x'] = self.loss_gen_recon_x.item() if self.loss_gen_recon_x != 0 else 0
+                self.loss_type['G_rec_x_B'] = self.loss_gen_recon_x.item() if self.loss_gen_recon_x != 0 else 0
                 # 这里应该分开存储，因为源域目标域的 模型不同。
                 # reconstruction loss (cross)
                 self.loss_gen_cross_x_ab = self.recon_criterion(x_ab_raw, Gx_b_raw)
                 self.loss_gen_cross_x_ba = self.recon_criterion(x_ba_raw, Gx_a_raw)
                 self.loss_gen_cross_x = opt.w_cross_x * (self.loss_gen_cross_x_ab + self.loss_gen_cross_x_ba)
-                self.loss_type['G_cross_x'] = self.loss_gen_cross_x.item() if self.loss_gen_cross_x != 0 else 0
+                self.loss_type['G_cross_x_B'] = self.loss_gen_cross_x.item() if self.loss_gen_cross_x != 0 else 0
 
                 # reconstruction loss (cycle)
                 if opt.w_cycle_x > 0:
@@ -1515,7 +1512,7 @@ class HICMDPP(nn.Module):
                     self.loss_gen_cyc_x_a = 0
                     self.loss_gen_cyc_x_b = 0
                 self.loss_gen_cyc_x = opt.w_cycle_x * (self.loss_gen_cyc_x_a + self.loss_gen_cyc_x_b)
-                self.loss_type['G_cyc_x'] = self.loss_gen_cyc_x.item() if self.loss_gen_cyc_x != 0 else 0
+                self.loss_type['G_cyc_x_B'] = self.loss_gen_cyc_x.item() if self.loss_gen_cyc_x != 0 else 0
 
                 # attribute code reconstruction loss    下面提取相应的属性和原型编码到对应的向量中。
                 att_style_s_a       = torch_gather(s_a_id, self.att_style_idx, 1)                                  # 2个 1024 维度的风格属性编码，ID相关。
@@ -1529,14 +1526,14 @@ class HICMDPP(nn.Module):
 
                 self.loss_gen_recon_s = self.recon_criterion(att_ex_s_a, att_ex_s_a_recon)  # 计算L code recon
                 self.loss_gen_recon_s += self.recon_criterion(att_ex_s_b, att_ex_s_b_recon)
-                self.etc_type['S_remain'] = self.loss_gen_recon_s.item()
+                self.etc_type['S_remain_B'] = self.loss_gen_recon_s.item()
 
                 self.loss_gen_recon_s2 = self.recon_criterion(att_style_s_b, att_style_s_a_recon)
                 self.loss_gen_recon_s2 += self.recon_criterion(att_style_s_a, att_style_s_b_recon)
-                self.etc_type['S_ID'] = self.loss_gen_recon_s2.item()
+                self.etc_type['S_ID_B'] = self.loss_gen_recon_s2.item()
                 self.loss_gen_recon_s += self.loss_gen_recon_s2
                 self.loss_gen_recon_s *= opt.w_recon_s
-                self.loss_type['G_rec_s'] = self.loss_gen_recon_s.item() if self.loss_gen_recon_s != 0 else 0
+                self.loss_type['G_rec_s_B'] = self.loss_gen_recon_s.item() if self.loss_gen_recon_s != 0 else 0
 
                 # KLD loss (attribute code to gaussian distribution)
                 self.loss_gen_s_a_kl = self.compute_kl(
@@ -1544,13 +1541,13 @@ class HICMDPP(nn.Module):
                 self.loss_gen_s_b_kl = self.compute_kl(
                     torch_gather(s_b, self.att_ex_idx, 1)) if opt.w_style_kl != 0 else 0
                 self.loss_gen_kl = opt.w_style_kl * (self.loss_gen_s_a_kl + self.loss_gen_s_b_kl)
-                self.loss_type['style_kl'] = self.loss_gen_kl.item() if self.loss_gen_kl != 0 else 0
+                self.loss_type['style_kl_B'] = self.loss_gen_kl.item() if self.loss_gen_kl != 0 else 0
 
                 # GAN loss
                 self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba_raw)
                 self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab_raw)
                 self.loss_gen_adv = opt.w_gan * (self.loss_gen_adv_a + self.loss_gen_adv_b)
-                self.loss_type['G_adv'] = self.loss_gen_adv.item() if self.loss_gen_adv != 0 else 0
+                self.loss_type['G_adv_B'] = self.loss_gen_adv.item() if self.loss_gen_adv != 0 else 0
                 s_a3_add = s_a2.clone()
                 s_b3_add = s_b2.clone()
 
@@ -1571,25 +1568,25 @@ class HICMDPP(nn.Module):
                 if opt.HFL_ratio > 0:
                     self.loss_gen_total *= (1.0 - opt.HFL_ratio)
 
-                self.loss_type['TOT_G'] = self.loss_gen_total.item()
+                self.loss_type['TOT_G_B'] = self.loss_gen_total.item()
 
             else:
                 try:
-                    self.loss_type['G_adv'] = self.old_loss_type['G_adv']
-                    self.loss_type['G_rec_x'] = self.old_loss_type['G_rec_x']
-                    self.loss_type['G_cyc_x'] = self.old_loss_type['G_cyc_x']
-                    self.loss_type['G_rec_s'] = self.old_loss_type['G_rec_s']
-                    self.loss_type['G_style_kl'] = self.old_loss_type['G_style_kl']
-                    self.loss_type['G_cross_x'] = self.old_loss_type['G_cross_x']
-                    self.loss_type['TOT_G'] = self.old_loss_type['TOT_G']
+                    self.loss_type['G_adv_B'] = self.old_loss_type['G_adv_B']
+                    self.loss_type['G_rec_x_B'] = self.old_loss_type['G_rec_x_B']
+                    self.loss_type['G_cyc_x_B'] = self.old_loss_type['G_cyc_x_B']
+                    self.loss_type['G_rec_s_B'] = self.old_loss_type['G_rec_s_B']
+                    self.loss_type['G_style_kl_B'] = self.old_loss_type['G_style_kl_B']
+                    self.loss_type['G_cross_x_B'] = self.old_loss_type['G_cross_x_B']
+                    self.loss_type['TOT_G_B'] = self.old_loss_type['TOT_G_B']
                 except:
-                    self.loss_type['G_adv'] = 0
-                    self.loss_type['G_rec_x'] = 0
-                    self.loss_type['G_cyc_x'] = 0
-                    self.loss_type['G_rec_s'] = 0
-                    self.loss_type['G_style_kl'] = 0
-                    self.loss_type['G_cross_x'] = 0
-                    self.loss_type['TOT_G'] = 0
+                    self.loss_type['G_adv_B'] = 0
+                    self.loss_type['G_rec_x_B'] = 0
+                    self.loss_type['G_cyc_x_B'] = 0
+                    self.loss_type['G_rec_s_B'] = 0
+                    self.loss_type['G_style_kl_B'] = 0
+                    self.loss_type['G_cross_x_B'] = 0
+                    self.loss_type['TOT_G_B'] = 0
 
         ##########################################################################
         # HFL (Hierarchical Feature Learning)
@@ -1812,7 +1809,8 @@ class HICMDPP(nn.Module):
             target_idx_dom_dis    = [ 1, 2, 5, 6 ]
             dom_idx               = find_array(idx_all, target_idx_dom_dis)
             f_all_target          = f_allout[dom_idx].clone()
-            self.loss_dom_adv     = self.dom_dis.calc_gen_loss(f_all_target) # 对目标域的特征向量计算损失函数。
+            # 对目标域的特征向量计算损失函数。
+            self.loss_dom_adv     = self.dom_dis.calc_gen_loss(f_all_target) if config['id_adv_w'] > 0 else 0
             self.loss_type['Dom'] = self.loss_dom_adv.item() if self.loss_dom_adv != 0 else 0
 
             ############################################################
@@ -1843,8 +1841,8 @@ class HICMDPP(nn.Module):
                 loss_all, acc_all, loss_cnt = self.apply_CE_loss_between_two_labels(opt, output_all_ce, label_all_ce,
                                                                                     num_part, 0.0, 0.0, 0.0)
                 self.loss_CE            = loss_all
-                self.acc_type['CE']     = acc_all / loss_cnt
-                self.loss_type['CE']    = self.loss_CE.item()
+                self.acc_type['CE_B']     = acc_all / loss_cnt
+                self.loss_type['CE_B']    = self.loss_CE.item()
 
                 # Triplet loss
                 loss_flag = opt.ID_TRIP_loss_flag
@@ -1863,12 +1861,12 @@ class HICMDPP(nn.Module):
                                                                 pscore_all, nscore_all, loss_cnt, \
                                                                 loss_flag, w_trip_reg, w_trip, triplet_margin)
                 self.loss_trip = loss_all
-                self.acc_type['Trip'] = acc_all / loss_cnt
-                self.etc_type['Trip_reg'] = reg_all / loss_cnt
-                self.etc_type['Trip_margin'] = margin_all / loss_cnt
-                self.etc_type['Trip_pscore'] = pscore_all / loss_cnt
-                self.etc_type['Trip_nscore'] = nscore_all / loss_cnt
-                self.loss_type['TRIP'] = self.loss_trip.item() if self.loss_trip != 0 else 0
+                self.acc_type['Trip_B'] = acc_all / loss_cnt
+                self.etc_type['Trip_reg_B'] = reg_all / loss_cnt
+                self.etc_type['Trip_margin_B'] = margin_all / loss_cnt
+                self.etc_type['Trip_pscore_B'] = pscore_all / loss_cnt
+                self.etc_type['Trip_nscore_B'] = nscore_all / loss_cnt
+                self.loss_type['TRIP_B'] = self.loss_trip.item() if self.loss_trip != 0 else 0
 
 
             self.loss_id_total = self.loss_CE + self.loss_trip + self.loss_dom_adv 
@@ -1876,25 +1874,25 @@ class HICMDPP(nn.Module):
             if opt.HFL_ratio > 0:
                 self.loss_id_total *= opt.HFL_ratio
 
-            self.loss_type['TOT_ID'] = self.loss_id_total.item()
+            self.loss_type['TOT_ID_B'] = self.loss_id_total.item()
 
         else:
             try:
-                self.loss_type['TOT_ID'] = self.old_loss_type['TOT_ID']
-                self.loss_type['CE'] = self.loss_type['CE']
-                self.acc_type['CE'] = self.acc_type['CE']
-                self.loss_type['TRIP'] = self.loss_type['TRIP']
-                self.acc_type['Trip'] = self.acc_type['Trip']
-                self.etc_type['Trip_reg'] = self.etc_type['Trip_reg']
-                self.etc_type['Trip_margin'] = self.etc_type['Trip_margin']
+                self.loss_type['TOT_ID_B'] = self.old_loss_type['TOT_ID_B']
+                self.loss_type['CE_B'] = self.loss_type['CE_B']
+                self.acc_type['CE_B'] = self.acc_type['CE_B']
+                self.loss_type['TRIP_B'] = self.loss_type['TRIP_B']
+                self.acc_type['Trip_B'] = self.acc_type['Trip_B']
+                self.etc_type['Trip_reg_B'] = self.etc_type['Trip_reg_B']
+                self.etc_type['Trip_margin_B'] = self.etc_type['Trip_margin_B']
             except:
-                self.loss_type['TOT_ID'] = 0
-                self.loss_type['CE'] = 0
-                self.acc_type['CE'] = 0
-                self.loss_type['TRIP'] = 0
-                self.acc_type['Trip'] = 0
-                self.etc_type['Trip_reg'] = 0
-                self.etc_type['Trip_margin'] = 0
+                self.loss_type['TOT_ID_B'] = 0
+                self.loss_type['CE_B'] = 0
+                self.acc_type['CE_B'] = 0
+                self.loss_type['TRIP_B'] = 0
+                self.acc_type['Trip_B'] = 0
+                self.etc_type['Trip_reg_B'] = 0
+                self.etc_type['Trip_margin_B'] = 0
 
         # Update ID-PIG and HFL
         # 这一步骤主要是对ID-PIG和HFL中的参数进行更新。
@@ -1906,16 +1904,16 @@ class HICMDPP(nn.Module):
             self.zero_grad_G = True
             self.id_optimizer.step()
             self.zero_grad_ID = True
-            self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
+            self.loss_type['TOTAL_B'] = self.loss_type['TOT_G_B'] + self.loss_type['TOT_ID_B'] + self.loss_type['TOT_D']
         elif Do_gen_update:
 
             self.loss_gen_total.backward()
             self.gen_optimizer_b.step()
             self.zero_grad_G = True
             try:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.old_loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_B'] = self.loss_type['TOT_G_B'] + self.old_loss_type['TOT_ID_B']  + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_B'] = self.loss_type['TOT_G_B'] + self.loss_type['TOT_ID_B']  + self.loss_type['TOT_D']
         elif Do_id_update:
             self.loss_id_total.backward()
             self.gen_optimizer_b.step()
@@ -1923,14 +1921,14 @@ class HICMDPP(nn.Module):
             self.id_optimizer.step()
             self.zero_grad_ID = True
             try:
-                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_B'] = self.old_loss_type['TOT_G_B'] + self.loss_type['TOT_ID_B']  + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_B'] = self.loss_type['TOT_G_B'] + self.loss_type['TOT_ID_B']  + self.loss_type['TOT_D']
         else:
             try:
-                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.old_loss_type['TOT_ID'] + self.old_loss_type['TOT_D']
+                self.loss_type['TOTAL_B'] = self.old_loss_type['TOT_G_B'] + self.old_loss_type['TOT_ID_B'] + self.old_loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_B'] = self.loss_type['TOT_G_B'] + self.loss_type['TOT_ID_B'] + self.loss_type['TOT_D']
 
 
         if self.case_a == 'RGB':
@@ -1953,7 +1951,7 @@ class HICMDPP(nn.Module):
             assert(False)
 
     # 更新 gen_update_ab.
-    def gen_update_ab(self, x_a, x_b, neg_a, neg_b, opt, phase,config):
+    def gen_update_ab(self, x_a, x_b, neg_a, neg_b, opt, phase, config):
 
         if self.case_a == 'RGB':
             self.dis_a = self.dis_RGB_a     
@@ -2037,14 +2035,14 @@ class HICMDPP(nn.Module):
 
                 self.loss_gen_recon_s = self.recon_criterion(att_ex_s_a, att_ex_s_a_recon)  # 计算L code recon
                 self.loss_gen_recon_s += self.recon_criterion(att_ex_s_b, att_ex_s_b_recon)
-                self.etc_type['S_remain'] = self.loss_gen_recon_s.item()
+                self.etc_type['S_remain_AB'] = self.loss_gen_recon_s.item()
 
                 self.loss_gen_recon_s2 = self.recon_criterion(att_style_s_b, att_style_s_a_recon)
                 self.loss_gen_recon_s2 += self.recon_criterion(att_style_s_a, att_style_s_b_recon)
-                self.etc_type['S_ID'] = self.loss_gen_recon_s2.item()
+                self.etc_type['S_ID_AB'] = self.loss_gen_recon_s2.item()
                 self.loss_gen_recon_s += self.loss_gen_recon_s2
                 self.loss_gen_recon_s *= opt.w_recon_s
-                self.loss_type['G_rec_s'] = self.loss_gen_recon_s.item() if self.loss_gen_recon_s != 0 else 0
+                self.loss_type['G_rec_s_AB'] = self.loss_gen_recon_s.item() if self.loss_gen_recon_s != 0 else 0
 
                 # KLD loss (attribute code to gaussian distribution)
                 self.loss_gen_s_a_kl = self.compute_kl(
@@ -2052,13 +2050,13 @@ class HICMDPP(nn.Module):
                 self.loss_gen_s_b_kl = self.compute_kl(
                     torch_gather(s_b, self.att_ex_idx, 1)) if opt.w_style_kl != 0 else 0
                 self.loss_gen_kl = opt.w_style_kl * (self.loss_gen_s_a_kl + self.loss_gen_s_b_kl)
-                self.loss_type['style_kl'] = self.loss_gen_kl.item() if self.loss_gen_kl != 0 else 0
+                self.loss_type['style_kl_AB'] = self.loss_gen_kl.item() if self.loss_gen_kl != 0 else 0
 
                 # GAN loss
                 self.loss_gen_adv_a = self.dis_a.calc_gen_loss(x_ba_raw)
                 self.loss_gen_adv_b = self.dis_b.calc_gen_loss(x_ab_raw)
                 self.loss_gen_adv = opt.w_gan * (self.loss_gen_adv_a + self.loss_gen_adv_b)
-                self.loss_type['G_adv'] = self.loss_gen_adv.item() if self.loss_gen_adv != 0 else 0
+                self.loss_type['G_adv_AB'] = self.loss_gen_adv.item() if self.loss_gen_adv != 0 else 0
                 s_a3_add = s_a2.clone()
                 s_b3_add = s_b2.clone()
 
@@ -2078,19 +2076,19 @@ class HICMDPP(nn.Module):
                 if opt.HFL_ratio > 0:
                     self.loss_gen_total *= (1.0 - opt.HFL_ratio)
 
-                self.loss_type['TOT_G'] = self.loss_gen_total.item()
+                self.loss_type['TOT_G_AB'] = self.loss_gen_total.item()
 
             else:
                 try:
-                    self.loss_type['G_adv'] = self.old_loss_type['G_adv']
-                    self.loss_type['G_rec_s'] = self.old_loss_type['G_rec_s']
-                    self.loss_type['G_style_kl'] = self.old_loss_type['G_style_kl']
-                    self.loss_type['TOT_G'] = self.old_loss_type['TOT_G']
+                    self.loss_type['G_adv_AB'] = self.old_loss_type['G_adv_AB']
+                    self.loss_type['G_rec_s_AB'] = self.old_loss_type['G_rec_s_AB']
+                    self.loss_type['G_style_kl_AB'] = self.old_loss_type['G_style_kl_AB']
+                    self.loss_type['TOT_G_AB'] = self.old_loss_type['TOT_G_AB']
                 except:
-                    self.loss_type['G_adv'] = 0
-                    self.loss_type['G_rec_s'] = 0
-                    self.loss_type['G_style_kl'] = 0
-                    self.loss_type['TOT_G'] = 0
+                    self.loss_type['G_adv_AB'] = 0
+                    self.loss_type['G_rec_s_AB'] = 0
+                    self.loss_type['G_style_kl_AB'] = 0
+                    self.loss_type['TOT_G_AB'] = 0
 
         ##########################################################################
         # HFL (Hierarchical Feature Learning)
@@ -2331,8 +2329,8 @@ class HICMDPP(nn.Module):
                                                                                     num_part, 0.0, 0.0, 0.0)
                 # 记录损失函数。
                 self.loss_CE = loss_all
-                self.acc_type['CE'] = acc_all / loss_cnt
-                self.loss_type['CE'] = self.loss_CE.item()
+                self.acc_type['CE_AB'] = acc_all / loss_cnt
+                self.loss_type['CE_AB'] = self.loss_CE.item()
                 self.loss_trip = 0
             else:
                 # CE loss  根据分类结果计算损失函数。
@@ -2341,8 +2339,8 @@ class HICMDPP(nn.Module):
                                                                                     num_part, 0.0, 0.0, 0.0)
                                                                                     # 记录损失函数。
                 self.loss_CE = loss_all
-                self.acc_type['CE'] = acc_all / loss_cnt
-                self.loss_type['CE'] = self.loss_CE.item()
+                self.acc_type['CE_AB'] = acc_all / loss_cnt
+                self.loss_type['CE_AB'] = self.loss_CE.item()
                 
                 # Triplet loss
                 loss_flag = opt.ID_TRIP_loss_flag
@@ -2362,19 +2360,20 @@ class HICMDPP(nn.Module):
                                                                 pscore_all, nscore_all, loss_cnt, \
                                                                 loss_flag, w_trip_reg, w_trip, triplet_margin)
                 self.loss_trip = loss_all
-                self.acc_type['Trip'] = acc_all / loss_cnt
-                self.etc_type['Trip_reg'] = reg_all / loss_cnt
-                self.etc_type['Trip_margin'] = margin_all / loss_cnt
-                self.etc_type['Trip_pscore'] = pscore_all / loss_cnt
-                self.etc_type['Trip_nscore'] = nscore_all / loss_cnt
-                self.loss_type['TRIP'] = self.loss_trip.item() if self.loss_trip != 0 else 0
+                self.acc_type['Trip_AB'] = acc_all / loss_cnt
+                self.etc_type['Trip_reg_AB'] = reg_all / loss_cnt
+                self.etc_type['Trip_margin_AB'] = margin_all / loss_cnt
+                self.etc_type['Trip_pscore_AB'] = pscore_all / loss_cnt
+                self.etc_type['Trip_nscore_AB'] = nscore_all / loss_cnt
+                self.loss_type['TRIP_AB'] = self.loss_trip.item() if self.loss_trip != 0 else 0
        
 
             # 这里可以加上与鉴别器的损失函数
             target_idx_dom_dis    = [ 2, 6 ]
             dom_idx               = find_array(idx_all, target_idx_dom_dis)
             f_all_target          = f_allout[dom_idx].clone()
-            self.loss_dom_adv     = self.dom_dis.calc_gen_loss(f_all_target) # 对目标域的特征向量计算损失函数。
+            # 对目标域的特征向量计算损失函数。
+            self.loss_dom_adv     = self.dom_dis.calc_gen_loss(f_all_target) if config['id_adv_w'] > 0 else 0
             self.loss_type['Dom'] = self.loss_dom_adv.item() if self.loss_dom_adv != 0 else 0
 
 
@@ -2384,25 +2383,25 @@ class HICMDPP(nn.Module):
             if opt.HFL_ratio > 0:
                 self.loss_id_total *= opt.HFL_ratio
 
-            self.loss_type['TOT_ID'] = self.loss_id_total.item()
+            self.loss_type['TOT_ID_AB'] = self.loss_id_total.item()
 
         else:
             try:
-                self.loss_type['TOT_ID'] = self.old_loss_type['TOT_ID']
-                self.loss_type['CE'] = self.loss_type['CE']
-                self.acc_type['CE'] = self.acc_type['CE']
-                self.loss_type['TRIP'] = self.loss_type['TRIP']
-                self.acc_type['Trip'] = self.acc_type['Trip']
-                self.etc_type['Trip_reg'] = self.etc_type['Trip_reg']
-                self.etc_type['Trip_margin'] = self.etc_type['Trip_margin']
+                self.loss_type['TOT_ID_AB'] = self.old_loss_type['TOT_ID_AB']
+                self.loss_type['CE_AB'] = self.loss_type['CE_AB']
+                self.acc_type['CE_AB'] = self.acc_type['CE_AB']
+                self.loss_type['TRIP_AB'] = self.loss_type['TRIP_AB']
+                self.acc_type['Trip_AB'] = self.acc_type['Trip_AB']
+                self.etc_type['Trip_reg_AB'] = self.etc_type['Trip_reg_AB']
+                self.etc_type['Trip_margin_AB'] = self.etc_type['Trip_margin_AB']
             except:
-                self.loss_type['TOT_ID'] = 0
-                self.loss_type['CE'] = 0
-                self.acc_type['CE'] = 0
-                self.loss_type['TRIP'] = 0
-                self.acc_type['Trip'] = 0
-                self.etc_type['Trip_reg'] = 0
-                self.etc_type['Trip_margin'] = 0
+                self.loss_type['TOT_ID_AB'] = 0
+                self.loss_type['CE_AB'] = 0
+                self.acc_type['CE_AB'] = 0
+                self.loss_type['TRIP_AB'] = 0
+                self.acc_type['Trip_AB'] = 0
+                self.etc_type['Trip_reg_AB'] = 0
+                self.etc_type['Trip_margin_AB'] = 0
              
         
         # Update ID-PIG and HFL
@@ -2415,16 +2414,16 @@ class HICMDPP(nn.Module):
             self.zero_grad_G = True
             self.id_optimizer.step()
             self.zero_grad_ID = True
-            self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
+            self.loss_type['TOTAL_AB'] = self.loss_type['TOT_G_AB'] + self.loss_type['TOT_ID_AB'] + self.loss_type['TOT_D']
         elif Do_gen_update:
 
             self.loss_gen_total.backward()
             self.gen_optimizer_a.step()
             self.zero_grad_G = True
             try:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.old_loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_AB'] = self.loss_type['TOT_G_AB'] + self.old_loss_type['TOT_ID_AB']  + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_AB'] = self.loss_type['TOT_G_AB'] + self.loss_type['TOT_ID_AB']  + self.loss_type['TOT_D']
         elif Do_id_update:
             self.loss_id_total.backward() # id_total loss 对于 gen 和id 都会进行更新。就说明，其作用域是多的。
             self.gen_optimizer_a.step()
@@ -2432,14 +2431,14 @@ class HICMDPP(nn.Module):
             self.id_optimizer.step()
             self.zero_grad_ID = True
             try:
-                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_AB'] = self.old_loss_type['TOT_G_AB'] + self.loss_type['TOT_ID_AB']  + self.loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID']  + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_AB'] = self.loss_type['TOT_G_AB'] + self.loss_type['TOT_ID_AB']  + self.loss_type['TOT_D']
         else:
             try:
-                self.loss_type['TOTAL'] = self.old_loss_type['TOT_G'] + self.old_loss_type['TOT_ID'] + self.old_loss_type['TOT_D']
+                self.loss_type['TOTAL_AB'] = self.old_loss_type['TOT_G_AB'] + self.old_loss_type['TOT_ID_AB'] + self.old_loss_type['TOT_D']
             except:
-                self.loss_type['TOTAL'] = self.loss_type['TOT_G'] + self.loss_type['TOT_ID'] + self.loss_type['TOT_D']
+                self.loss_type['TOTAL_AB'] = self.loss_type['TOT_G_AB'] + self.loss_type['TOT_ID_AB'] + self.loss_type['TOT_D']
 
         # 源域的模型。
         if self.case_a == 'RGB':
@@ -2466,7 +2465,9 @@ class HICMDPP(nn.Module):
     def forward(self, opt, input, modal, cam):
     # The subclass of nn.Module must has the implementation of forward.
     # 这个函数定义了HICMD模型的前馈过程。
-
+    # modal： 定义图像的模态。
+    # cam： 定义了相机的类型。红外/可见光。
+    # forward 测试的应该是目标域的。
         self.eval()  #  变换到evaluation阶段。
 
         modal_np = np.asarray(modal)  # modal 记录了
@@ -2492,10 +2493,11 @@ class HICMDPP(nn.Module):
         Gx_a_raw = Gx_a.clone()
         Gx_b_raw = Gx_b.clone()
 
+        # 源域和目标域的原型编码器是共享参数的。
         if is_RGB:
-            c_a = self.gen_RGB.enc_pro(Gx_a)  # 调用RGB原型编码器 来对RGB图像进行 原型编码得到 c_a RGB图像的原型编码
+            c_a = self.gen_RGB_b.enc_pro(Gx_a)  # 调用目标域的 RGB原型编码器 来对RGB图像进行 原型编码得到 c_a RGB图像的原型编码
         if is_IR:
-            c_b = self.gen_IR.enc_pro(Gx_b)   # 调用IR原型编码器 来对IR图像进行  原型编码。  c_b IR图像的原型编码
+            c_b = self.gen_IR_b.enc_pro(Gx_b)   # 调用目标域的 IR原型编码器  来对IR图像进行  原型编码。  c_b IR图像的原型编码
 
         new_shape = [len(modal)]  # 获得modal的长度，这是一个list变量。
         if is_RGB:  
@@ -2515,10 +2517,11 @@ class HICMDPP(nn.Module):
         s_mat = []
         s_vec = []
 
+        # 这部分属性编码器 
         if is_RGB:
-            s_a_mat, s_a = self.gen_RGB.enc_att(Gx_a, flag_raw=True)   # 调用RGB属性编码器 对输入的RGB图像进行属性编码 得到 s_a。
+            s_a_mat, s_a = self.gen_RGB_b.enc_att(Gx_a, flag_raw=True)   # 调用RGB属性编码器 对输入的RGB图像进行属性编码 得到 s_a。
         if is_IR:
-            s_b_mat, s_b = self.gen_IR.enc_att(Gx_b, flag_raw=True)    # 调用IR属性编码器  对输入的IR图像进行属性编码  得到 s_b。
+            s_b_mat, s_b = self.gen_IR_b.enc_att(Gx_b, flag_raw=True)    # 调用IR属性编码器  对输入的IR图像进行属性编码  得到 s_b。
 
         if is_RGB:
             new_shape = [len(modal)]
@@ -2549,7 +2552,7 @@ class HICMDPP(nn.Module):
         c_mat = []
         c_vec = []
 
-        c_id, c_mat = self.backbone_pro(c_id, multi_output = True)   # 进行原型编码的backbone。
+        c_id, c_mat = self.backbone_pro_b(c_id, multi_output = True)   # 进行原型编码的backbone。
         c_vec = c_id
 
         s_id_all = s_id
@@ -2561,14 +2564,14 @@ class HICMDPP(nn.Module):
         c_id_norm = c_id.div(torch.norm(c_id, p=2, dim=1, keepdim=True).expand_as(c_id))
         s_id_norm = s_id.div(torch.norm(s_id, p=2, dim=1, keepdim=True).expand_as(s_id))
 
-        c_id_norm *= min(self.combine_weight.multp, 1.0)
-        s_id_norm *= max((1.0 - self.combine_weight.multp), 0.0)
+        c_id_norm *= min(self.combine_weight_b.multp, 1.0)
+        s_id_norm *= max((1.0 - self.combine_weight_b.multp), 0.0)
 
         f0 = torch.Tensor().cuda()
         f0 = torch.cat((f0, c_id_norm), dim=1)
         f0 = torch.cat((f0, s_id_norm), dim=1)
 
-        _, f1, f_triplet = self.id_classifier(f0)
+        _, f1, f_triplet = self.id_classifier_b(f0)
 
         feature = []
         if 'content' in opt.evaluate_category:
@@ -3538,6 +3541,7 @@ class HICMDPP(nn.Module):
                         input_img = nn.functional.interpolate(input_img, scale_factor=scale, mode='bicubic', align_corners=False)
                     
                     # extract features.
+                    # NOTE: 这里还是使用了forward来计算特征向量。
                     feature, _ = self.forward(opt, input_img, modals_set[cnt], cams_set[cnt])
 
                     if cnt_first == 1:
